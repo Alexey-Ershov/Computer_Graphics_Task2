@@ -1,1 +1,3 @@
 build/*
+dependencies/include/SOIL
+*.png

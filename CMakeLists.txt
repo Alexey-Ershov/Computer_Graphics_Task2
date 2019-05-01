@@ -12,6 +12,8 @@ set(SOURCE_FILES
 
 set(ADDITIONAL_INCLUDE_DIRS
         dependencies/include/GLAD)
+set(SOIL_INCLUDE_DIRS
+        dependencies/include/SOIL)
 set(ADDITIONAL_LIBRARY_DIRS
         dependencies/lib)   
 set(ADDITIONAL_RUNTIME_LIBRARY_DIRS
@@ -30,6 +32,7 @@ else()
 endif()
 
 include_directories(${ADDITIONAL_INCLUDE_DIRS})
+include_directories(${SOIL_INCLUDE_DIRS})
 
 find_package(OpenGL REQUIRED)
 
@@ -45,6 +48,6 @@ if(WIN32)
   target_link_libraries(main LINK_PUBLIC ${OPENGL_gl_LIBRARY} glfw3dll)
 else()
   target_compile_options(main PRIVATE -Wnarrowing)
-  target_link_libraries(main LINK_PUBLIC ${OPENGL_gl_LIBRARY} glfw rt dl)
+  target_link_libraries(main LINK_PUBLIC ${OPENGL_gl_LIBRARY} glfw rt dl SOIL)
 endif()
 

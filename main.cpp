@@ -6,6 +6,7 @@
 #define GLFW_DLL
 #include <GLFW/glfw3.h>
 #include <random>
+#include <SOIL.h>
 
 static const GLsizei WIDTH = 1024, HEIGHT = 768; //размеры окна
 
@@ -95,12 +96,13 @@ int main(int argc, char** argv)
     GLuint g_vertexArrayObject;
     GLuint EBO;
   
-    float trianglePos[] =
+    GLfloat trianglePos[] =
     {
-        0.5f,  0.5f,  0.0f,  // Верхний правый угол
-        0.5f, -0.5f,  0.0f,  // Нижний правый угол
-       -0.5f, -0.5f,  0.0f,  // Нижний левый угол
-       -0.5f,  0.5f,  0.0f   // Верхний левый угол
+        // Positions           // Texture Coords
+         0.5f,  0.5f,  0.0f,   0.9f, 0.0f, // Top Right
+         0.5f, -0.5f,  0.0f,   0.9f, 1.0f, // Bottom Right
+        -0.5f, -0.5f,  0.0f,   0.0f, 1.0f, // Bottom Left
+        -0.5f,  0.5f,  0.0f,   0.0f, 0.0f  // Top Left
     };
 
     GLuint indices[] =
@@ -145,10 +147,58 @@ int main(int argc, char** argv)
 
     glEnableVertexAttribArray(vertexLocation);
 
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    // Position attribute
+    glVertexAttribPointer(vertexLocation,
+                          3,
+                          GL_FLOAT,
+                          GL_FALSE,
+                          5 * sizeof(GLfloat),
+                          (GLvoid *) 0);
+    glEnableVertexAttribArray(0);
+
+    // TexCoord attribute
+    glVertexAttribPointer(vertexLocation + 1,
+                          2,
+                          GL_FLOAT,
+                          GL_FALSE,
+                          5 * sizeof(GLfloat),
+                          (GLvoid *) (3 * sizeof(GLfloat)));
+    glEnableVertexAttribArray(1);
+
+    // glBindBuffer(GL_ARRAY_BUFFER, 0);
 
     glBindVertexArray(0);
     GL_CHECK_ERRORS;
+
+    GLuint texture;
+    glGenTextures(1, &texture);
+    
+    glBindTexture(GL_TEXTURE_2D, texture);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    
+    int width, height;
+    unsigned char* image = SOIL_load_image("../e38.png",
+                                           &width,
+                                           &height,
+                                           0,
+                                           SOIL_LOAD_RGB);
+    glTexImage2D(GL_TEXTURE_2D,
+                 0,
+                 GL_RGB,
+                 width,
+                 height,
+                 0,
+                 GL_RGB,
+                 GL_UNSIGNED_BYTE,
+                 image);
+    glGenerateMipmap(GL_TEXTURE_2D);
+    SOIL_free_image_data(image);
+    glBindTexture(GL_TEXTURE_2D, 0);
 
 	// Game loop.
 	while (!glfwWindowShouldClose(window)) {
@@ -166,9 +216,15 @@ int main(int argc, char** argv)
                 GL_DEPTH_BUFFER_BIT |
                 GL_STENCIL_BUFFER_BIT);
 
-        program.StartUseShader();
-        GL_CHECK_ERRORS;
+        /*program.StartUseShader();
+        GL_CHECK_ERRORS;*/
 
+        // Bind Texture
+        glBindTexture(GL_TEXTURE_2D, texture);
+        // Activate shader
+        program.StartUseShader();
+        
+        // Draw container
         glBindVertexArray(g_vertexArrayObject);
         GL_CHECK_ERRORS;
 
