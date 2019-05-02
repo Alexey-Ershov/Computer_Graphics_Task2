@@ -1,35 +1,90 @@
 //internal includes
 #include "common.h"
 #include "ShaderProgram.h"
+#include "camera.h"
 
 //External dependencies
 #define GLFW_DLL
 #include <GLFW/glfw3.h>
 #include <SOIL.h>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
 
 #include <random>
 #include <string>
 #include <vector>
 
-static const GLsizei WIDTH = 1024, HEIGHT = 768; //размеры окна
+
+static const GLsizei WIDTH = 1280;
+static const GLsizei HEIGHT = 720;
+
+// Camera.
+Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
+float lastX = (float) WIDTH / 2.0;
+float lastY = (float) HEIGHT / 2.0;
+bool firstMouse = true;
+
+// timing
+float deltaTime = 0.0f;
+float lastFrame = 0.0f;
 
 
-void key_callback(GLFWwindow* window,
-                  int key,
-                  int scancode,
-                  int action,
-                  int mode)
+// process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
+// ---------------------------------------------------------------------------------------------------------
+void processInput(GLFWwindow *window)
 {
-    // Когда пользователь нажимает ESC, мы устанавливаем свойство WindowShouldClose в true, 
-    // и приложение после этого закроется
-    if(key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
-        glfwSetWindowShouldClose(window, GL_TRUE);
+    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+        glfwSetWindowShouldClose(window, true);
+
+    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+        camera.ProcessKeyboard(FORWARD, deltaTime);
+    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+        camera.ProcessKeyboard(BACKWARD, deltaTime);
+    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+        camera.ProcessKeyboard(LEFT, deltaTime);
+    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+        camera.ProcessKeyboard(RIGHT, deltaTime);
+}
+
+// glfw: whenever the window size changed (by OS or user resize) this callback function executes
+// ---------------------------------------------------------------------------------------------
+void framebuffer_size_callback(GLFWwindow* window, int width, int height)
+{
+    // make sure the viewport matches the new window dimensions; note that width and 
+    // height will be significantly larger than specified on retina displays.
+    glViewport(0, 0, width, height);
+}
+
+// glfw: whenever the mouse moves, this callback is called
+// -------------------------------------------------------
+void mouse_callback(GLFWwindow* window, double xpos, double ypos)
+{
+    if (firstMouse)
+    {
+        lastX = xpos;
+        lastY = ypos;
+        firstMouse = false;
+    }
+
+    float xoffset = xpos - lastX;
+    float yoffset = lastY - ypos; // reversed since y-coordinates go from bottom to top
+
+    lastX = xpos;
+    lastY = ypos;
+
+    camera.ProcessMouseMovement(xoffset, yoffset);
+}
+
+// glfw: whenever the mouse scroll wheel scrolls, this callback is called
+// ----------------------------------------------------------------------
+void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
+{
+    camera.ProcessMouseScroll(yoffset);
 }
 
 unsigned int loadCubemap(std::vector<std::string> faces)
 {
-    std::string face = "../starry_sky.tga";
-
     unsigned int textureID;
     glGenTextures(1, &textureID);
     glBindTexture(GL_TEXTURE_CUBE_MAP, textureID);
@@ -67,6 +122,45 @@ unsigned int loadCubemap(std::vector<std::string> faces)
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
+    return textureID;
+}
+
+// utility function for loading a 2D texture from file
+// ---------------------------------------------------
+unsigned int loadTexture(char const *path)
+{
+    unsigned int textureID;
+    glGenTextures(1, &textureID);
+
+    int width, height, nrComponents;
+    unsigned char *data = SOIL_load_image(path, &width, &height, &nrComponents, 0);
+    if (data)
+    {
+        GLenum format;
+        if (nrComponents == 1)
+            format = GL_RED;
+        else if (nrComponents == 3)
+            format = GL_RGB;
+        else if (nrComponents == 4)
+            format = GL_RGBA;
+
+        glBindTexture(GL_TEXTURE_2D, textureID);
+        glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+        SOIL_free_image_data(data);
+    }
+    else
+    {
+        std::cout << "Texture failed to load at path: " << path << std::endl;
+        SOIL_free_image_data(data);
+    }
 
     return textureID;
 }
@@ -115,13 +209,17 @@ int main(int argc, char** argv)
 	}
 	
 	glfwMakeContextCurrent(window); 
-	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-
-    glfwSetKeyCallback(window, key_callback);
+    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+    glfwSetCursorPosCallback(window, mouse_callback);
+    glfwSetScrollCallback(window, scroll_callback);
+	// glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
 	if (initGL() != 0) {
 	   return -1;
     }
+
+    glEnable(GL_DEPTH_TEST);
 	
     //Reset any OpenGL errors which could be present for some reason
 	GLenum gl_error = glGetError();
@@ -152,13 +250,50 @@ int main(int argc, char** argv)
     GLuint g_vertexArrayObject;
     GLuint EBO;
   
-    GLfloat vertices[] =
+    float cubeVertices[] =
     {
-        // Positions           // Texture Coords
-         0.5f,  0.5f,  0.0f,   0.9f, 0.0f, // Top Right
-         0.5f, -0.5f,  0.0f,   0.9f, 1.0f, // Bottom Right
-        -0.5f, -0.5f,  0.0f,   0.0f, 1.0f, // Bottom Left
-        -0.5f,  0.5f,  0.0f,   0.0f, 0.0f  // Top Left
+        // positions          // normals
+        -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+         0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+         0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+         0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+        -0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+        -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+
+        -0.5f, -0.5f,  0.5f,  0.0f,  0.0f, 1.0f,
+         0.5f, -0.5f,  0.5f,  0.0f,  0.0f, 1.0f,
+         0.5f,  0.5f,  0.5f,  0.0f,  0.0f, 1.0f,
+         0.5f,  0.5f,  0.5f,  0.0f,  0.0f, 1.0f,
+        -0.5f,  0.5f,  0.5f,  0.0f,  0.0f, 1.0f,
+        -0.5f, -0.5f,  0.5f,  0.0f,  0.0f, 1.0f,
+
+        -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
+        -0.5f,  0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
+        -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
+        -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
+        -0.5f, -0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
+        -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
+
+         0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
+         0.5f,  0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
+         0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
+         0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
+         0.5f, -0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
+         0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
+
+        -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
+         0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
+         0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
+         0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
+        -0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
+        -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
+
+        -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,
+         0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,
+         0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
+         0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
+        -0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
+        -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f
     };
 
     GLuint indices[] =
@@ -213,148 +348,90 @@ int main(int argc, char** argv)
          1.0f, -1.0f,  1.0f
     };
 
-    g_vertexBufferObject = 0;
-    GLuint vertexLocation = 0;
-
-    glGenVertexArrays(1, &g_vertexArrayObject);
-
-    glGenBuffers(1, &g_vertexBufferObject);
-    GL_CHECK_ERRORS;
-    
-    glGenBuffers(1, &EBO);
-    GL_CHECK_ERRORS;
-    
-    glBindVertexArray(g_vertexArrayObject);
-
-    glBindBuffer(GL_ARRAY_BUFFER, g_vertexBufferObject);
-    GL_CHECK_ERRORS;
-
-    glBufferData(GL_ARRAY_BUFFER,
-                 sizeof(vertices),
-                 (GLfloat *) vertices,
-                 GL_STATIC_DRAW);
-    GL_CHECK_ERRORS;
-
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-    GL_CHECK_ERRORS;
-
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-                 sizeof(indices),
-                 (GLfloat *) indices,
-                 GL_STATIC_DRAW);
-    GL_CHECK_ERRORS;
-
-    glVertexAttribPointer(vertexLocation, 3, GL_FLOAT, GL_FALSE, 0, 0);
-    GL_CHECK_ERRORS;
-
-    glEnableVertexAttribArray(vertexLocation);
-
-    // Position attribute
-    glVertexAttribPointer(vertexLocation,
-                          3,
-                          GL_FLOAT,
-                          GL_FALSE,
-                          5 * sizeof(GLfloat),
-                          (GLvoid *) 0);
+    // cube VAO
+    unsigned int cubeVAO, cubeVBO;
+    glGenVertexArrays(1, &cubeVAO);
+    glGenBuffers(1, &cubeVBO);
+    glBindVertexArray(cubeVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, cubeVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(cubeVertices), &cubeVertices, GL_STATIC_DRAW);
     glEnableVertexAttribArray(0);
-
-    // TexCoord attribute
-    glVertexAttribPointer(vertexLocation + 1,
-                          2,
-                          GL_FLOAT,
-                          GL_FALSE,
-                          5 * sizeof(GLfloat),
-                          (GLvoid *) (3 * sizeof(GLfloat)));
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(1);
-
-    // glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-    glBindVertexArray(0);
-    GL_CHECK_ERRORS;
-
-    GLuint textureID;
-    glGenTextures(1, &textureID);
-    
-    glBindTexture(GL_TEXTURE_2D, textureID);
-
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    
-    int width, height;
-    unsigned char* image = SOIL_load_image("../e38.png",
-                                           &width,
-                                           &height,
-                                           0,
-                                           SOIL_LOAD_RGB);
-    glTexImage2D(GL_TEXTURE_2D,
-                 0,
-                 GL_RGB,
-                 width,
-                 height,
-                 0,
-                 GL_RGB,
-                 GL_UNSIGNED_BYTE,
-                 image);
-    glGenerateMipmap(GL_TEXTURE_2D);
-    SOIL_free_image_data(image);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
     // skybox VAO
-    unsigned int skyboxVAO;
-    unsigned int skyboxVBO;
+    unsigned int skyboxVAO, skyboxVBO;
     glGenVertexArrays(1, &skyboxVAO);
     glGenBuffers(1, &skyboxVBO);
     glBindVertexArray(skyboxVAO);
     glBindBuffer(GL_ARRAY_BUFFER, skyboxVBO);
-    glBufferData(GL_ARRAY_BUFFER,
-                 sizeof(skyboxVertices),
-                 &skyboxVertices,
-                 GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), &skyboxVertices, GL_STATIC_DRAW);
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0,
-                          3,
-                          GL_FLOAT,
-                          GL_FALSE,
-                          3 * sizeof(float),
-                          (void *) 0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
 
+    // load textures
+    // -------------
     std::vector<std::string> faces
     {
-        "../textures/skybox/vr_rt.tga",
-        "../textures/skybox/vr_lf.tga",
-        "../textures/skybox/vr_up.tga",
-        "../textures/skybox/vr_dn.tga",
-        "../textures/skybox/vr_bk.tga",
-        "../textures/skybox/vr_ft.tga",
+        "../textures/skybox/purplenebula_rt.tga",
+        "../textures/skybox/purplenebula_lf.tga",
+        "../textures/skybox/purplenebula_up.tga",
+        "../textures/skybox/purplenebula_dn.tga",
+        "../textures/skybox/purplenebula_ft.tga",
+        "../textures/skybox/purplenebula_bk.tga",
     };
-
     unsigned int cubemapTexture = loadCubemap(faces);
 
-	// Game loop.
-	while (!glfwWindowShouldClose(window)) {
-		glfwPollEvents();
+    // shader configuration
+    // --------------------
+    program.StartUseShader();
+    program.SetUniform("skybox", 0);
 
-		//очищаем экран каждый кадр
-		glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-        GL_CHECK_ERRORS;
-		
+    skybox_program.StartUseShader();
+    skybox_program.SetUniform("skybox", 0);
+
+    // render loop
+    // -----------
+    while (!glfwWindowShouldClose(window))
+    {
+        // per-frame time logic
+        // --------------------
+        float currentFrame = glfwGetTime();
+        deltaTime = currentFrame - lastFrame;
+        lastFrame = currentFrame;
+
+        // input
+        // -----
+        processInput(window);
+
+        // render
+        // ------
+        glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        GL_CHECK_ERRORS;
 
-        glClearColor(0.0f, 0.169f, 0.212f, 0.0f);
-        glClear(GL_COLOR_BUFFER_BIT |
-                GL_DEPTH_BUFFER_BIT |
-                GL_STENCIL_BUFFER_BIT);
+        // draw scene as normal
+        program.StartUseShader();
+        glm::mat4 model = glm::mat4(1.0f);
+        glm::mat4 view = camera.GetViewMatrix();
+        glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float) WIDTH / (float) HEIGHT, 0.1f, 100.0f);
+        program.SetUniform("model", model);
+        program.SetUniform("view", view);
+        program.SetUniform("projection", projection);
+        program.SetUniform("cameraPos", camera.Position);
+        
+        // cubes
+        glBindVertexArray(cubeVAO);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+        glBindVertexArray(0);
 
         // draw skybox as last
         glDepthFunc(GL_LEQUAL);  // change depth function so depth test passes when values are equal to depth buffer's content
         skybox_program.StartUseShader();
-        /*view = glm::mat4(glm::mat3(camera.GetViewMatrix())); // remove translation from the view matrix
-        skyboxShader.setMat4("view", view);
-        skyboxShader.setMat4("projection", projection);*/
+        view = glm::mat4(glm::mat3(camera.GetViewMatrix())); // remove translation from the view matrix
+        skybox_program.SetUniform("view", view);
+        skybox_program.SetUniform("projection", projection);
         // skybox cube
         glBindVertexArray(skyboxVAO);
         glActiveTexture(GL_TEXTURE0);
@@ -363,26 +440,19 @@ int main(int argc, char** argv)
         glBindVertexArray(0);
         glDepthFunc(GL_LESS); // set depth function back to default
 
-        /*
-        glBindTexture(GL_TEXTURE_2D, textureID);
-        program.StartUseShader();
-        glBindVertexArray(g_vertexArrayObject);
-        GL_CHECK_ERRORS;
-        // // glDrawArrays(GL_TRIANGLES, 0, 3);
-        // GL_CHECK_ERRORS;  // The last parameter of glDrawArrays is equal to
-                          // VS invocations
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-        glBindVertexArray(0);*/
-        
-        // program.StopUseShader();
+        // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
+        // -------------------------------------------------------------------------------
+        glfwSwapBuffers(window);
+        glfwPollEvents();
+    }
 
-        glfwSwapBuffers(window); 
-	}
+    // optional: de-allocate all resources once they've outlived their purpose:
+    // ------------------------------------------------------------------------
+    glDeleteVertexArrays(1, &cubeVAO);
+    glDeleteVertexArrays(1, &skyboxVAO);
+    glDeleteBuffers(1, &cubeVBO);
+    glDeleteBuffers(1, &skyboxVAO);
 
-	glDeleteVertexArrays(1, &g_vertexArrayObject);
-    glDeleteBuffers(1, &g_vertexBufferObject);
-    glDeleteBuffers(1, &EBO);
-
-	glfwTerminate();
-	return 0;
+    glfwTerminate();
+    return 0;
 }

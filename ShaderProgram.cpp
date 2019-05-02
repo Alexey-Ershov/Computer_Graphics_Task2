@@ -208,3 +208,29 @@ void ShaderProgram::SetUniform(const std::string &location, double value) const
   }
   glUniform1d(uniformLocation, value);
 }
+
+void ShaderProgram::SetUniform(const std::string &location,
+                               const glm::vec3 &value) const
+{
+  GLint uniformLocation = glGetUniformLocation(shaderProgram,
+                                               location.c_str());
+  if (uniformLocation == -1)
+  {
+    std::cerr << "Uniform  " << location << " not found" << std::endl;
+    return;
+  }
+  glUniform3fv(uniformLocation, 1, &value[0]);
+}
+
+void ShaderProgram::SetUniform(const std::string &location,
+                               const glm::mat4 &mat) const
+{
+  GLint uniformLocation = glGetUniformLocation(shaderProgram,
+                                               location.c_str());
+  if (uniformLocation == -1)
+  {
+    std::cerr << "Uniform  " << location << " not found" << std::endl;
+    return;
+  }
+  glUniformMatrix4fv(uniformLocation, 1, GL_FALSE, &mat[0][0]);
+}

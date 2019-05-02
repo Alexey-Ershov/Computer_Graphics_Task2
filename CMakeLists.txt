@@ -11,7 +11,8 @@ set(SOURCE_FILES
     ShaderProgram.cpp)
 
 set(ADDITIONAL_INCLUDE_DIRS
-        dependencies/include/GLAD)
+        dependencies/include/GLAD
+        dependencies/include)
 set(SOIL_INCLUDE_DIRS
         dependencies/include/SOIL)
 set(ADDITIONAL_LIBRARY_DIRS

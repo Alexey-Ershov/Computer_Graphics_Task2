@@ -1,8 +1,10 @@
 #ifndef SHADERPROGRAM_H
 #define SHADERPROGRAM_H
 
-#include <unordered_map>
+#include <glm/glm.hpp>
 #include "common.h"
+
+#include <unordered_map>
 
 
 class ShaderProgram
@@ -33,6 +35,12 @@ public:
   void SetUniform(const std::string &location, int value) const;
 
   void SetUniform(const std::string &location, unsigned int value) const;
+
+  void SetUniform(const std::string &location,
+                                 const glm::vec3 &value) const;
+
+  void SetUniform(const std::string &location,
+                                 const glm::mat4 &mat) const;
 
 private:
   static GLuint LoadShaderObject(GLenum type, const std::string &filename);

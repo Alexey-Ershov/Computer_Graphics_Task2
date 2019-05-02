@@ -1,0 +1,6 @@
+I. Установка сторонних библиотек
+
+    1. SOIL
+        a. Скопировать директорию src библиотеки SOIL в директорию
+           dependencies/include проекта
+        b. sudo apt-get install libsoil-dev
