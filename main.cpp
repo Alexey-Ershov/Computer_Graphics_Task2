@@ -5,8 +5,11 @@
 //External dependencies
 #define GLFW_DLL
 #include <GLFW/glfw3.h>
-#include <random>
 #include <SOIL.h>
+
+#include <random>
+#include <string>
+#include <vector>
 
 static const GLsizei WIDTH = 1024, HEIGHT = 768; //размеры окна
 
@@ -21,6 +24,51 @@ void key_callback(GLFWwindow* window,
     // и приложение после этого закроется
     if(key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
         glfwSetWindowShouldClose(window, GL_TRUE);
+}
+
+unsigned int loadCubemap(std::vector<std::string> faces)
+{
+    std::string face = "../starry_sky.tga";
+
+    unsigned int textureID;
+    glGenTextures(1, &textureID);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, textureID);
+
+    int width, height, nrChannels;
+    for (unsigned int i = 0; i < faces.size(); i++) {
+        unsigned char *data = SOIL_load_image(faces[i].c_str(),
+                                              &width,
+                                              &height,
+                                              &nrChannels,
+                                              0);
+        if (data)
+        {
+            glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,
+                         0,
+                         GL_RGB,
+                         width,
+                         height,
+                         0,
+                         GL_RGB,
+                         GL_UNSIGNED_BYTE,
+                         data);
+            SOIL_free_image_data(data);
+        
+        } else {
+            std::cout << "Cubemap texture failed to load at path: "
+                      << faces[i]
+                      << std::endl;
+            SOIL_free_image_data(data);
+        }
+    }
+
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
+    return textureID;
 }
 
 int initGL()
@@ -89,6 +137,14 @@ int main(int argc, char** argv)
 	ShaderProgram program(shaders);
     GL_CHECK_ERRORS;
 
+    //создание шейдерной программы из двух файлов с исходниками шейдеров
+    //используется класс-обертка ShaderProgram
+    std::unordered_map<GLenum, std::string> skybox_shaders;
+    skybox_shaders[GL_VERTEX_SHADER] = "skybox_vertex.glsl";
+    skybox_shaders[GL_FRAGMENT_SHADER] = "skybox_fragment.glsl";
+    ShaderProgram skybox_program(skybox_shaders);
+    GL_CHECK_ERRORS;
+
     glfwSwapInterval(1); // force 60 frames per second
 
     //Создаем и загружаем геометрию поверхности
@@ -96,7 +152,7 @@ int main(int argc, char** argv)
     GLuint g_vertexArrayObject;
     GLuint EBO;
   
-    GLfloat trianglePos[] =
+    GLfloat vertices[] =
     {
         // Positions           // Texture Coords
          0.5f,  0.5f,  0.0f,   0.9f, 0.0f, // Top Right
@@ -109,6 +165,52 @@ int main(int argc, char** argv)
     {
         0, 1, 3, // Первый треугольник
         1, 2, 3  // Второй треугольник
+    };
+
+    float skyboxVertices[] =
+    {
+        // positions          
+        -1.0f,  1.0f, -1.0f,
+        -1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f, -1.0f,
+         1.0f,  1.0f, -1.0f,
+        -1.0f,  1.0f, -1.0f,
+
+        -1.0f, -1.0f,  1.0f,
+        -1.0f, -1.0f, -1.0f,
+        -1.0f,  1.0f, -1.0f,
+        -1.0f,  1.0f, -1.0f,
+        -1.0f,  1.0f,  1.0f,
+        -1.0f, -1.0f,  1.0f,
+
+         1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f, -1.0f,
+         1.0f, -1.0f, -1.0f,
+
+        -1.0f, -1.0f,  1.0f,
+        -1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f, -1.0f,  1.0f,
+        -1.0f, -1.0f,  1.0f,
+
+        -1.0f,  1.0f, -1.0f,
+         1.0f,  1.0f, -1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+        -1.0f,  1.0f,  1.0f,
+        -1.0f,  1.0f, -1.0f,
+
+        -1.0f, -1.0f, -1.0f,
+        -1.0f, -1.0f,  1.0f,
+         1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f, -1.0f,
+        -1.0f, -1.0f,  1.0f,
+         1.0f, -1.0f,  1.0f
     };
 
     g_vertexBufferObject = 0;
@@ -128,8 +230,8 @@ int main(int argc, char** argv)
     GL_CHECK_ERRORS;
 
     glBufferData(GL_ARRAY_BUFFER,
-                 sizeof(trianglePos),
-                 (GLfloat *) trianglePos,
+                 sizeof(vertices),
+                 (GLfloat *) vertices,
                  GL_STATIC_DRAW);
     GL_CHECK_ERRORS;
 
@@ -170,10 +272,10 @@ int main(int argc, char** argv)
     glBindVertexArray(0);
     GL_CHECK_ERRORS;
 
-    GLuint texture;
-    glGenTextures(1, &texture);
+    GLuint textureID;
+    glGenTextures(1, &textureID);
     
-    glBindTexture(GL_TEXTURE_2D, texture);
+    glBindTexture(GL_TEXTURE_2D, textureID);
 
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
@@ -200,6 +302,37 @@ int main(int argc, char** argv)
     SOIL_free_image_data(image);
     glBindTexture(GL_TEXTURE_2D, 0);
 
+    // skybox VAO
+    unsigned int skyboxVAO;
+    unsigned int skyboxVBO;
+    glGenVertexArrays(1, &skyboxVAO);
+    glGenBuffers(1, &skyboxVBO);
+    glBindVertexArray(skyboxVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, skyboxVBO);
+    glBufferData(GL_ARRAY_BUFFER,
+                 sizeof(skyboxVertices),
+                 &skyboxVertices,
+                 GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0,
+                          3,
+                          GL_FLOAT,
+                          GL_FALSE,
+                          3 * sizeof(float),
+                          (void *) 0);
+
+    std::vector<std::string> faces
+    {
+        "../textures/skybox/vr_rt.tga",
+        "../textures/skybox/vr_lf.tga",
+        "../textures/skybox/vr_up.tga",
+        "../textures/skybox/vr_dn.tga",
+        "../textures/skybox/vr_bk.tga",
+        "../textures/skybox/vr_ft.tga",
+    };
+
+    unsigned int cubemapTexture = loadCubemap(faces);
+
 	// Game loop.
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
@@ -216,26 +349,32 @@ int main(int argc, char** argv)
                 GL_DEPTH_BUFFER_BIT |
                 GL_STENCIL_BUFFER_BIT);
 
-        /*program.StartUseShader();
-        GL_CHECK_ERRORS;*/
+        // draw skybox as last
+        glDepthFunc(GL_LEQUAL);  // change depth function so depth test passes when values are equal to depth buffer's content
+        skybox_program.StartUseShader();
+        /*view = glm::mat4(glm::mat3(camera.GetViewMatrix())); // remove translation from the view matrix
+        skyboxShader.setMat4("view", view);
+        skyboxShader.setMat4("projection", projection);*/
+        // skybox cube
+        glBindVertexArray(skyboxVAO);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+        glBindVertexArray(0);
+        glDepthFunc(GL_LESS); // set depth function back to default
 
-        // Bind Texture
-        glBindTexture(GL_TEXTURE_2D, texture);
-        // Activate shader
+        /*
+        glBindTexture(GL_TEXTURE_2D, textureID);
         program.StartUseShader();
-        
-        // Draw container
         glBindVertexArray(g_vertexArrayObject);
         GL_CHECK_ERRORS;
-
-        // glDrawArrays(GL_TRIANGLES, 0, 3);
-        /*GL_CHECK_ERRORS;  // The last parameter of glDrawArrays is equal to
-                          // VS invocations*/
+        // // glDrawArrays(GL_TRIANGLES, 0, 3);
+        // GL_CHECK_ERRORS;  // The last parameter of glDrawArrays is equal to
+                          // VS invocations
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-
-        glBindVertexArray(0);
-
-        program.StopUseShader();
+        glBindVertexArray(0);*/
+        
+        // program.StopUseShader();
 
         glfwSwapBuffers(window); 
 	}
