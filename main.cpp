@@ -2,6 +2,7 @@
 #include "common.h"
 #include "ShaderProgram.h"
 #include "camera.h"
+#include "model.h"
 
 //External dependencies
 #define GLFW_DLL
@@ -16,8 +17,8 @@
 #include <vector>
 
 
-static const GLsizei WIDTH = 1280;
-static const GLsizei HEIGHT = 720;
+static const GLsizei WIDTH = 1530;
+static const GLsizei HEIGHT = 840;
 
 // Camera.
 Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
@@ -227,13 +228,13 @@ int main(int argc, char** argv)
 		gl_error = glGetError();
     }
 
-	//создание шейдерной программы из двух файлов с исходниками шейдеров
+	/*//создание шейдерной программы из двух файлов с исходниками шейдеров
 	//используется класс-обертка ShaderProgram
 	std::unordered_map<GLenum, std::string> shaders;
 	shaders[GL_VERTEX_SHADER] = "vertex.glsl";
 	shaders[GL_FRAGMENT_SHADER] = "fragment.glsl";
 	ShaderProgram program(shaders);
-    GL_CHECK_ERRORS;
+    GL_CHECK_ERRORS;*/
 
     //создание шейдерной программы из двух файлов с исходниками шейдеров
     //используется класс-обертка ShaderProgram
@@ -243,64 +244,15 @@ int main(int argc, char** argv)
     ShaderProgram skybox_program(skybox_shaders);
     GL_CHECK_ERRORS;
 
-    glfwSwapInterval(1); // force 60 frames per second
+    //создание шейдерной программы из двух файлов с исходниками шейдеров
+    //используется класс-обертка ShaderProgram
+    std::unordered_map<GLenum, std::string> model_shaders;
+    model_shaders[GL_VERTEX_SHADER] = "model_vertex.glsl";
+    model_shaders[GL_FRAGMENT_SHADER] = "model_fragment.glsl";
+    ShaderProgram model_program(model_shaders);
+    GL_CHECK_ERRORS;
 
-    //Создаем и загружаем геометрию поверхности
-    GLuint g_vertexBufferObject;
-    GLuint g_vertexArrayObject;
-    GLuint EBO;
-  
-    float cubeVertices[] =
-    {
-        // positions          // normals
-        -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-         0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-         0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-         0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-        -0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-        -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-
-        -0.5f, -0.5f,  0.5f,  0.0f,  0.0f, 1.0f,
-         0.5f, -0.5f,  0.5f,  0.0f,  0.0f, 1.0f,
-         0.5f,  0.5f,  0.5f,  0.0f,  0.0f, 1.0f,
-         0.5f,  0.5f,  0.5f,  0.0f,  0.0f, 1.0f,
-        -0.5f,  0.5f,  0.5f,  0.0f,  0.0f, 1.0f,
-        -0.5f, -0.5f,  0.5f,  0.0f,  0.0f, 1.0f,
-
-        -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
-        -0.5f,  0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
-        -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
-        -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
-        -0.5f, -0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
-        -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
-
-         0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
-         0.5f,  0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
-         0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
-         0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
-         0.5f, -0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
-         0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
-
-        -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
-         0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
-         0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
-         0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
-        -0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
-        -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
-
-        -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,
-         0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,
-         0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
-         0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
-        -0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
-        -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f
-    };
-
-    GLuint indices[] =
-    {
-        0, 1, 3, // Первый треугольник
-        1, 2, 3  // Второй треугольник
-    };
+    // glfwSwapInterval(1); // force 60 frames per second
 
     float skyboxVertices[] =
     {
@@ -348,17 +300,6 @@ int main(int argc, char** argv)
          1.0f, -1.0f,  1.0f
     };
 
-    // cube VAO
-    unsigned int cubeVAO, cubeVBO;
-    glGenVertexArrays(1, &cubeVAO);
-    glGenBuffers(1, &cubeVBO);
-    glBindVertexArray(cubeVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, cubeVBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(cubeVertices), &cubeVertices, GL_STATIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
     // skybox VAO
     unsigned int skyboxVAO, skyboxVBO;
     glGenVertexArrays(1, &skyboxVAO);
@@ -373,24 +314,30 @@ int main(int argc, char** argv)
     // -------------
     std::vector<std::string> faces
     {
-        "../textures/skybox/purplenebula_rt.tga",
-        "../textures/skybox/purplenebula_lf.tga",
-        "../textures/skybox/purplenebula_up.tga",
-        "../textures/skybox/purplenebula_dn.tga",
-        "../textures/skybox/purplenebula_ft.tga",
-        "../textures/skybox/purplenebula_bk.tga",
+        "../resources/textures/skybox/purplenebula_lf.tga",
+        "../resources/textures/skybox/purplenebula_rt.tga",
+        "../resources/textures/skybox/purplenebula_up.tga",
+        "../resources/textures/skybox/purplenebula_dn.tga",
+        "../resources/textures/skybox/purplenebula_ft.tga",
+        "../resources/textures/skybox/purplenebula_bk.tga",
     };
+    
     unsigned int cubemapTexture = loadCubemap(faces);
 
     // shader configuration
     // --------------------
-    program.StartUseShader();
-    program.SetUniform("skybox", 0);
+    /*program.StartUseShader();
+    program.SetUniform("skybox", 0);*/
 
     skybox_program.StartUseShader();
     skybox_program.SetUniform("skybox", 0);
 
-    // render loop
+    /*model_program.StartUseShader();*/
+
+    Model ourModel(
+            "../resources/objects/vulcan_dkyr_class/vulcan_dkyr_class.obj");
+
+    // Render loop
     // -----------
     while (!glfwWindowShouldClose(window))
     {
@@ -406,10 +353,25 @@ int main(int argc, char** argv)
 
         // render
         // ------
-        glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+        glClearColor(0.71f, 0.09f, 0.03f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // draw scene as normal
+        model_program.StartUseShader();
+        // view/projection transformations
+        glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float) WIDTH / (float) HEIGHT, 0.1f, 100.0f);
+        glm::mat4 view = camera.GetViewMatrix();
+        model_program.SetUniform("projection", projection);
+        model_program.SetUniform("view", view);
+
+        // render the loaded model
+        // model_program.StartUseShader();
+        glm::mat4 suit_model = glm::mat4(1.0f);
+        suit_model = glm::translate(suit_model, glm::vec3(0.0f, -1.75f, 0.0f)); // translate it down so it's at the center of the scene
+        suit_model = glm::scale(suit_model, glm::vec3(0.2f, 0.2f, 0.2f)); // it's a bit too big for our scene, so scale it down
+        model_program.SetUniform("model", suit_model);
+        ourModel.Draw(model_program);
+
+        /*// draw scene as normal
         program.StartUseShader();
         glm::mat4 model = glm::mat4(1.0f);
         glm::mat4 view = camera.GetViewMatrix();
@@ -417,15 +379,8 @@ int main(int argc, char** argv)
         program.SetUniform("model", model);
         program.SetUniform("view", view);
         program.SetUniform("projection", projection);
-        program.SetUniform("cameraPos", camera.Position);
+        program.SetUniform("cameraPos", camera.Position);*/
         
-        // cubes
-        glBindVertexArray(cubeVAO);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
-        glDrawArrays(GL_TRIANGLES, 0, 36);
-        glBindVertexArray(0);
-
         // draw skybox as last
         glDepthFunc(GL_LEQUAL);  // change depth function so depth test passes when values are equal to depth buffer's content
         skybox_program.StartUseShader();
@@ -448,9 +403,7 @@ int main(int argc, char** argv)
 
     // optional: de-allocate all resources once they've outlived their purpose:
     // ------------------------------------------------------------------------
-    glDeleteVertexArrays(1, &cubeVAO);
     glDeleteVertexArrays(1, &skyboxVAO);
-    glDeleteBuffers(1, &cubeVBO);
     glDeleteBuffers(1, &skyboxVAO);
 
     glfwTerminate();

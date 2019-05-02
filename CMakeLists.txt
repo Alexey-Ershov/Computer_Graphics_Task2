@@ -8,7 +8,10 @@ set(SOURCE_FILES
     glad.c
     main.cpp
     ShaderProgram.h
-    ShaderProgram.cpp)
+    ShaderProgram.cpp
+    camera.h
+    mesh.h
+    model.h)
 
 set(ADDITIONAL_INCLUDE_DIRS
         dependencies/include/GLAD
@@ -42,6 +45,12 @@ add_executable(main ${SOURCE_FILES})
 target_include_directories(main PRIVATE ${OPENGL_INCLUDE_DIR})
 add_custom_command(TARGET main POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory "${PROJECT_SOURCE_DIR}/shaders" "${PROJECT_BINARY_DIR}")
 
+#ASSIMP
+find_package(ASSIMP REQUIRED)
+if(ASSIMP_FOUND)
+    include_directories(${ASSIMP_INCLUDE_DIR})
+endif()
+
 if(WIN32)
   add_custom_command(TARGET main POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory "${PROJECT_SOURCE_DIR}/dependencies/bin" $<TARGET_FILE_DIR:main>)
   #set(CMAKE_MSVCIDE_RUN_PATH ${ADDITIONAL_RUNTIME_LIBRARY_DIRS})
@@ -50,5 +59,5 @@ if(WIN32)
 else()
   target_compile_options(main PRIVATE -Wnarrowing)
   target_link_libraries(main LINK_PUBLIC ${OPENGL_gl_LIBRARY} glfw rt dl SOIL)
+  target_link_libraries(main LINK_PUBLIC ${ASSIMP_LIBRARIES})
 endif()
-
