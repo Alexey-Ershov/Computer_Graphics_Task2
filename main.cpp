@@ -16,8 +16,18 @@
 #include <string>
 #include <vector>
 
+#include <ctime>
+#include <cmath>
 
-static const GLsizei WIDTH = 1530;
+
+struct ModelAttributes
+{
+    float appearance_timestamp;
+    float x;
+    float y;
+};
+
+static const GLsizei WIDTH = 1120;
 static const GLsizei HEIGHT = 840;
 
 // Camera.
@@ -29,6 +39,15 @@ bool firstMouse = true;
 // timing
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
+
+ShaderProgram program;
+ShaderProgram model_program;
+ShaderProgram skybox_program;
+unsigned int cubemapTexture;
+GLuint VAO;
+unsigned int skyboxVAO;
+float current_frame;
+GLuint scope_texture;
 
 
 // process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
@@ -164,15 +183,67 @@ unsigned int loadTexture(char const *path)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
         SOIL_free_image_data(data);
-    }
-    else
-    {
+    
+    } else {
         std::cout << "Texture failed to load at path: " << path << std::endl;
         SOIL_free_image_data(data);
     }
 
     return textureID;
 }
+
+void draw_model(Model model, float appearance_timestamp, float x, float y)
+{
+    model_program.StartUseShader();
+    // view/projection transformations
+    glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float) WIDTH / (float) HEIGHT, 0.1f, 100.0f);
+    glm::mat4 view = camera.GetViewMatrix();
+    model_program.SetUniform("view", view);
+    model_program.SetUniform("projection", projection);
+
+    // First starship.
+    glm::mat4 starship_model = glm::mat4(1.0f);
+    starship_model = glm::translate(starship_model,
+            glm::vec3(x, y,
+            -100.0f + 20 * (current_frame - appearance_timestamp)));
+
+    starship_model = glm::rotate(starship_model,
+                             3.14095f,
+                             glm::vec3(0.0f, 1.0f, 0.0f));
+
+    /*starship_model = glm::scale(starship_model, glm::vec3(0.2f, 0.2f, 0.2f));*/
+
+    model_program.SetUniform("model", starship_model);
+    model.Draw(model_program);
+}
+
+void draw_skybox()
+{
+    glDepthFunc(GL_LEQUAL);  // change depth function so depth test passes when values are equal to depth buffer's content
+    skybox_program.StartUseShader();
+    glm::mat4 view = glm::mat4(glm::mat3(camera.GetViewMatrix())); // remove translation from the view matrix
+    glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float) WIDTH / (float) HEIGHT, 0.1f, 100.0f);
+    skybox_program.SetUniform("view", view);
+    skybox_program.SetUniform("projection", projection);
+    // skybox cube
+    glBindVertexArray(skyboxVAO);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+    glBindVertexArray(0);
+    glDepthFunc(GL_LESS); // set depth function back to default
+}
+
+/*void draw_scope()
+{
+    glBindTexture(GL_TEXTURE_2D, scope_texture);
+
+    program.StartUseShader();
+
+    glBindVertexArray(VAO);
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+    glBindVertexArray(0);
+}*/
 
 int initGL()
 {
@@ -228,20 +299,22 @@ int main(int argc, char** argv)
 	   return -1;
     }
 
-    glEnable(GL_DEPTH_TEST);
-	
     //Reset any OpenGL errors which could be present for some reason
 	GLenum gl_error = glGetError();
 	while (gl_error != GL_NO_ERROR){
 		gl_error = glGetError();
     }
 
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
 	/*//создание шейдерной программы из двух файлов с исходниками шейдеров
 	//используется класс-обертка ShaderProgram
 	std::unordered_map<GLenum, std::string> shaders;
 	shaders[GL_VERTEX_SHADER] = "vertex.glsl";
 	shaders[GL_FRAGMENT_SHADER] = "fragment.glsl";
-	ShaderProgram program(shaders);
+	program = ShaderProgram(shaders);
     GL_CHECK_ERRORS;*/
 
     //создание шейдерной программы из двух файлов с исходниками шейдеров
@@ -249,7 +322,7 @@ int main(int argc, char** argv)
     std::unordered_map<GLenum, std::string> skybox_shaders;
     skybox_shaders[GL_VERTEX_SHADER] = "skybox_vertex.glsl";
     skybox_shaders[GL_FRAGMENT_SHADER] = "skybox_fragment.glsl";
-    ShaderProgram skybox_program(skybox_shaders);
+    skybox_program = ShaderProgram(skybox_shaders);
     GL_CHECK_ERRORS;
 
     //создание шейдерной программы из двух файлов с исходниками шейдеров
@@ -257,10 +330,25 @@ int main(int argc, char** argv)
     std::unordered_map<GLenum, std::string> model_shaders;
     model_shaders[GL_VERTEX_SHADER] = "model_vertex.glsl";
     model_shaders[GL_FRAGMENT_SHADER] = "model_fragment.glsl";
-    ShaderProgram model_program(model_shaders);
+    model_program = ShaderProgram(model_shaders);
     GL_CHECK_ERRORS;
 
     // glfwSwapInterval(1); // force 60 frames per second
+
+    /*GLfloat vertices[] =
+    {
+        // Positions          // Colors           // Texture Coords
+         0.05f,  0.05f, 0.0f,   1.0f, 0.0f, 0.0f,   1.0f, 1.0f, // Top Right
+         0.05f, -0.05f, 0.0f,   0.0f, 1.0f, 0.0f,   1.0f, 0.0f, // Bottom Right
+        -0.05f, -0.05f, 0.0f,   0.0f, 0.0f, 1.0f,   0.0f, 0.0f, // Bottom Left
+        -0.05f,  0.05f, 0.0f,   1.0f, 1.0f, 0.0f,   0.0f, 1.0f  // Top Left 
+    };
+
+    GLuint indices[] =
+    {  // Note that we start from 0!
+        0, 1, 3, // First Triangle
+        1, 2, 3  // Second Triangle
+    };*/
 
     float skyboxVertices[] =
     {
@@ -308,8 +396,36 @@ int main(int argc, char** argv)
          1.0f, -1.0f,  1.0f
     };
 
+    /*GLuint VBO;
+    GLuint EBO;
+    glGenVertexArrays(1, &VAO);
+    glGenBuffers(1, &VBO);
+    glGenBuffers(1, &EBO);
+
+    glBindVertexArray(VAO);
+
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+
+    // Position attribute
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (GLvoid*)0);
+    glEnableVertexAttribArray(0);
+    // Color attribute
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (GLvoid*) (3 * sizeof(GLfloat)));
+    glEnableVertexAttribArray(1);
+    // TexCoord attribute
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (GLvoid*) (6 * sizeof(GLfloat)));
+    glEnableVertexAttribArray(2);
+
+    glBindVertexArray(0); // Unbind VAO
+
+    scope_texture = loadTexture("../resources/textures/scope.png");*/
+
     // skybox VAO
-    unsigned int skyboxVAO, skyboxVBO;
+    unsigned int skyboxVBO;
     glGenVertexArrays(1, &skyboxVAO);
     glGenBuffers(1, &skyboxVBO);
     glBindVertexArray(skyboxVAO);
@@ -330,7 +446,7 @@ int main(int argc, char** argv)
         "../resources/textures/skybox/purplenebula_bk.tga",
     };
     
-    unsigned int cubemapTexture = loadCubemap(faces);
+    cubemapTexture = loadCubemap(faces);
 
     // shader configuration
     // --------------------
@@ -342,76 +458,87 @@ int main(int argc, char** argv)
 
     /*model_program.StartUseShader();*/
 
-    Model ourModel(
-            "../resources/objects/vulcan_dkyr_class/vulcan_dkyr_class.obj");
-
-    /*Model ourModel(
+    /*Model nanosuit_model(
             "../resources/objects/nanosuit/nanosuit.obj");*/
 
-    // Render loop
-    // -----------
-    while (!glfwWindowShouldClose(window))
-    {
-        // per-frame time logic
-        // --------------------
-        float currentFrame = glfwGetTime();
-        deltaTime = currentFrame - lastFrame;
-        lastFrame = currentFrame;
+    Model vulcan_starship_model(
+            "../resources/objects/vulcan_dkyr_class/vulcan_dkyr_class.obj");
 
-        // input
-        // -----
+    Model e45_model(
+            "../resources/objects/E-45-Aircraft/E 45 Aircraft_obj.obj");
+
+    std::vector<ModelAttributes> model_attributes;
+    /*std::vector<void (draw_model)(Model model, float x, float y)>
+            models;*/
+
+    srand(time(0));
+
+    float prev_timestamp = 0.0f;
+    bool was_push_back = false;
+
+    // Render loop.
+    while (!glfwWindowShouldClose(window)) {
+        current_frame = glfwGetTime();
+        deltaTime = current_frame - lastFrame;
+        lastFrame = current_frame;
+
         processInput(window);
 
-        // render
-        // ------
         glClearColor(0.71f, 0.09f, 0.03f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        model_program.StartUseShader();
-        // view/projection transformations
-        glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float) WIDTH / (float) HEIGHT, 0.1f, 100.0f);
-        glm::mat4 view = camera.GetViewMatrix();
-        model_program.SetUniform("projection", projection);
-        model_program.SetUniform("view", view);
-
-        // render the loaded model
-        // model_program.StartUseShader();
-        glm::mat4 suit_model = glm::mat4(1.0f);
-        suit_model = glm::translate(suit_model, glm::vec3(0.0f, 0.0f, -10.0f)); // translate it down so it's at the center of the scene
-        suit_model = glm::rotate(suit_model,
-                                 3.14095f,
-                                 glm::vec3(0.0f, 1.0f, 0.0f));
-
-        // suit_model = glm::scale(suit_model, glm::vec3(0.2f, 0.2f, 0.2f)); // it's a bit too big for our scene, so scale it down
-        model_program.SetUniform("model", suit_model);
-        ourModel.Draw(model_program);
-
-        /*// draw scene as normal
-        program.StartUseShader();
-        glm::mat4 model = glm::mat4(1.0f);
-        glm::mat4 view = camera.GetViewMatrix();
-        glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float) WIDTH / (float) HEIGHT, 0.1f, 100.0f);
-        program.SetUniform("model", model);
-        program.SetUniform("view", view);
-        program.SetUniform("projection", projection);
-        program.SetUniform("cameraPos", camera.Position);*/
+        float rounded_current_frame = round(current_frame);
         
-        // draw skybox as last
-        glDepthFunc(GL_LEQUAL);  // change depth function so depth test passes when values are equal to depth buffer's content
-        skybox_program.StartUseShader();
-        view = glm::mat4(glm::mat3(camera.GetViewMatrix())); // remove translation from the view matrix
-        skybox_program.SetUniform("view", view);
-        skybox_program.SetUniform("projection", projection);
-        // skybox cube
-        glBindVertexArray(skyboxVAO);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
-        glDrawArrays(GL_TRIANGLES, 0, 36);
-        glBindVertexArray(0);
-        glDepthFunc(GL_LESS); // set depth function back to default
+        if (not was_push_back and ((int) rounded_current_frame) % 2 == 0) {
+            model_attributes.push_back(
+                    {
+                        current_frame,
+                        (float) -15 + rand() % 31,
+                        (float) -15 + rand() % 31
+                    });
 
-        // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
-        // -------------------------------------------------------------------------------
+            prev_timestamp = rounded_current_frame;
+            was_push_back = true;
+        
+        } else if (was_push_back and rounded_current_frame > prev_timestamp) {
+            was_push_back = false;
+        }
+
+        /*std::cout << "+++++++++++++++" << std::endl;
+        std::cout << "rounded_current_frame = "
+                  << rounded_current_frame
+                  << std::endl;
+        for (int i = 0; i < model_attributes.size(); i++) {
+            std::cout << "model_attributes["
+                      << i
+                      << "] = "
+                      << model_attributes[i].appearance_timestamp
+                      << " : "
+                      << model_attributes[i].x
+                      << " : "
+                      << model_attributes[i].y
+                      << std::endl;
+        }
+        std::cout << "---------------" << std::endl << std::endl;*/
+
+        /*std::cout << "rand_value = " << -10 + rand() % 21 << std::endl;*/
+
+        /*std::cout << "current_frame = " << rounded_current_frame << std::endl;*/
+
+        /*draw_model(e45_model,
+                   5.0f,
+                   -15.0f,
+                   -15.0f);*/
+
+        for (auto &it: model_attributes) {
+            draw_model(e45_model,
+                       it.appearance_timestamp,
+                       it.x,
+                       it.y);
+        }
+
+        draw_skybox();
+
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
@@ -420,6 +547,10 @@ int main(int argc, char** argv)
     // ------------------------------------------------------------------------
     glDeleteVertexArrays(1, &skyboxVAO);
     glDeleteBuffers(1, &skyboxVAO);
+
+    /*glDeleteVertexArrays(1, &VAO);
+    glDeleteBuffers(1, &VBO);
+    glDeleteBuffers(1, &EBO);*/
 
     glfwTerminate();
     return 0;

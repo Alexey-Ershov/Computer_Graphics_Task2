@@ -11,4 +11,8 @@ I. Установка сторонних библиотек
         b. cmake CMakeLists.txt
            make -j4
            sudo make install
+           При появлении ошибки:
+           "./main: error while loading shared libraries: libassimp.so.4:
+           cannot open shared object file: No such file or directory"
+           выполнить в терминале команду:
            export LD_LIBRARY_PATH=/usr/local/lib
