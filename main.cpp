@@ -35,17 +35,25 @@ float lastFrame = 0.0f;
 // ---------------------------------------------------------------------------------------------------------
 void processInput(GLFWwindow *window)
 {
-    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
         glfwSetWindowShouldClose(window, true);
+    }
 
-    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
         camera.ProcessKeyboard(FORWARD, deltaTime);
-    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+    }
+
+    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
         camera.ProcessKeyboard(BACKWARD, deltaTime);
-    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+    }
+
+    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
         camera.ProcessKeyboard(LEFT, deltaTime);
-    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+    }
+
+    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
         camera.ProcessKeyboard(RIGHT, deltaTime);
+    }
 }
 
 // glfw: whenever the window size changed (by OS or user resize) this callback function executes
@@ -337,6 +345,9 @@ int main(int argc, char** argv)
     Model ourModel(
             "../resources/objects/vulcan_dkyr_class/vulcan_dkyr_class.obj");
 
+    /*Model ourModel(
+            "../resources/objects/nanosuit/nanosuit.obj");*/
+
     // Render loop
     // -----------
     while (!glfwWindowShouldClose(window))
@@ -366,8 +377,12 @@ int main(int argc, char** argv)
         // render the loaded model
         // model_program.StartUseShader();
         glm::mat4 suit_model = glm::mat4(1.0f);
-        suit_model = glm::translate(suit_model, glm::vec3(0.0f, -1.75f, 0.0f)); // translate it down so it's at the center of the scene
-        suit_model = glm::scale(suit_model, glm::vec3(0.2f, 0.2f, 0.2f)); // it's a bit too big for our scene, so scale it down
+        suit_model = glm::translate(suit_model, glm::vec3(0.0f, 0.0f, -10.0f)); // translate it down so it's at the center of the scene
+        suit_model = glm::rotate(suit_model,
+                                 3.14095f,
+                                 glm::vec3(0.0f, 1.0f, 0.0f));
+
+        // suit_model = glm::scale(suit_model, glm::vec3(0.2f, 0.2f, 0.2f)); // it's a bit too big for our scene, so scale it down
         model_program.SetUniform("model", suit_model);
         ourModel.Draw(model_program);
 
