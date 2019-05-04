@@ -31,6 +31,7 @@ struct ModelAttributes
     float appearance_timestamp;
     float x;
     float y;
+    float z;
 };
 
 /// Holds all state information relevant to a character as loaded using FreeType
@@ -63,10 +64,12 @@ ShaderProgram program;
 ShaderProgram model_program;
 ShaderProgram skybox_program;
 ShaderProgram text_program;
+ShaderProgram plasm_ball_program;
 unsigned int cubemapTexture;
 unsigned int skyboxVAO;
 float current_frame;
 GLuint scope_texture;
+std::vector<ModelAttributes> plasm_ball_attributes;
 
 
 // process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
@@ -125,6 +128,29 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos)
     lastY = ypos;
 
     camera.ProcessMouseMovement(xoffset, yoffset);
+}
+
+void mouse_button_callback(GLFWwindow* window,
+                           int button,
+                           int action,
+                           int mods)
+{
+    if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS) {
+        
+        std::cout << "+++++++++++++++++++" << std::endl;
+        std::cout << "xpos = " << camera.Front.x << std::endl;
+        std::cout << "ypos = " << camera.Front.y << std::endl;
+        std::cout << "zpos = " << camera.Front.z << std::endl;
+        std::cout << "-------------------" << std::endl << std::endl;
+
+        plasm_ball_attributes.push_back(
+                {
+                    current_frame,
+                    camera.Front.x,
+                    camera.Front.y,
+                    camera.Front.z
+                });
+    }
 }
 
 // glfw: whenever the mouse scroll wheel scrolls, this callback is called
@@ -215,7 +241,10 @@ unsigned int loadTexture(char const *path)
     return textureID;
 }
 
-void draw_model(Model model, float appearance_timestamp, float x, float y)
+void draw_model(Model model,
+                float appearance_timestamp,
+                float x,
+                float y)
 {
     model_program.StartUseShader();
     // view/projection transformations
@@ -238,6 +267,35 @@ void draw_model(Model model, float appearance_timestamp, float x, float y)
 
     model_program.SetUniform("model", starship_model);
     model.Draw(model_program);
+}
+
+void draw_plasm_ball(Model model,
+                     float appearance_timestamp,
+                     float x,
+                     float y,
+                     float z)
+{
+    plasm_ball_program.StartUseShader();
+    // view/projection transformations
+    glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float) WIDTH / (float) HEIGHT, 0.1f, 100.0f);
+    glm::mat4 view = camera.GetViewMatrix();
+    plasm_ball_program.SetUniform("view", view);
+    plasm_ball_program.SetUniform("projection", projection);
+
+    // First starship.
+    glm::mat4 starship_model = glm::mat4(1.0f);
+    starship_model = glm::translate(starship_model,
+            glm::vec3(
+            125 * x * (current_frame - appearance_timestamp),
+            125 * y * (current_frame - appearance_timestamp),
+            100 * z / abs(z) * (current_frame - appearance_timestamp)));
+
+    starship_model = glm::scale(starship_model, glm::vec3(0.005f,
+                                                          0.005f,
+                                                          0.005f));
+
+    plasm_ball_program.SetUniform("model", starship_model);
+    model.Draw(plasm_ball_program);
 }
 
 void draw_skybox()
@@ -369,6 +427,7 @@ int main(int argc, char** argv)
 	glfwMakeContextCurrent(window); 
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
     glfwSetCursorPosCallback(window, mouse_callback);
+    glfwSetMouseButtonCallback(window, mouse_button_callback);
     glfwSetScrollCallback(window, scroll_callback);
 	// glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
@@ -411,6 +470,12 @@ int main(int argc, char** argv)
     text_shaders[GL_VERTEX_SHADER] = "text_vertex.glsl";
     text_shaders[GL_FRAGMENT_SHADER] = "text_fragment.glsl";
     text_program = ShaderProgram(text_shaders);
+    GL_CHECK_ERRORS;
+
+    std::unordered_map<GLenum, std::string> plasm_ball_shaders;
+    plasm_ball_shaders[GL_VERTEX_SHADER] = "model_vertex.glsl";
+    plasm_ball_shaders[GL_FRAGMENT_SHADER] = "plasm_ball_fragment.glsl";
+    plasm_ball_program = ShaderProgram(plasm_ball_shaders);
     GL_CHECK_ERRORS;
 
     glm::mat4 projection = glm::ortho(0.0f,
@@ -624,11 +689,14 @@ int main(int argc, char** argv)
     /*Model nanosuit_model(
             "../resources/objects/nanosuit/nanosuit.obj");*/
 
-    Model vulcan_starship_model(
-            "../resources/objects/vulcan_dkyr_class/vulcan_dkyr_class.obj");
+    /*Model vulcan_starship_model(
+            "../resources/objects/vulcan_dkyr_class/vulcan_dkyr_class.obj");*/
 
     Model e45_model(
             "../resources/objects/E-45-Aircraft/E 45 Aircraft_obj.obj");
+
+    Model sphere_model(
+            "../resources/objects/Quad_Sphere/3d-model.obj");
 
     std::vector<ModelAttributes> model_attributes;
     /*std::vector<void (draw_model)(Model model, float x, float y)>
@@ -647,7 +715,8 @@ int main(int argc, char** argv)
 
         processInput(window);
 
-        glClearColor(0.71f, 0.09f, 0.03f, 1.0f);
+        /*glClearColor(0.71f, 0.09f, 0.03f, 1.0f);*/
+        glClearColor(0.02f, 0.2f, 0.07f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         float rounded_current_frame = round(current_frame);
@@ -700,12 +769,22 @@ int main(int argc, char** argv)
                        it.y);
         }
 
+        for (auto &it: plasm_ball_attributes) {
+            draw_plasm_ball(sphere_model,
+                            it.appearance_timestamp,
+                            it.x,
+                            it.y,
+                            it.z);
+        }
+
         draw_skybox();
 
         RenderText(text_program,
                    "+",
-                   545.0f,
-                   400.0f,
+                   /*545.0f,
+                   400.0f,*/
+                   555.0f,
+                   415.0f,
                    0.5f,
                    glm::vec3(1.0f, 1.0f, 1.0f));
 
