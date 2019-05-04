@@ -2,3 +2,5 @@ build/*
 dependencies/include/SOIL
 container.jpg
 resources/textures/scope.png
+dependencies/include/freetype
+font.*

@@ -16,3 +16,14 @@ I. Установка сторонних библиотек
            cannot open shared object file: No such file or directory"
            выполнить в терминале команду:
            export LD_LIBRARY_PATH=/usr/local/lib
+
+    3. FREETYE
+        a. Скачать исходный код по ссылке:
+    https://download.savannah.gnu.org/releases/freetype/freetype-2.10.0.tar.bz2
+        b. В корневой директории библиотеки выполнить:
+            sh autogen.sh
+            make setup ansi
+            make
+        c. Скопировать директорию с библиотекой
+           (она должна называться freetype, если название другое,
+           переименовать) в директорию dependencies/include проекта

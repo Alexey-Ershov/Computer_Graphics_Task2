@@ -15,9 +15,9 @@ set(SOURCE_FILES
 
 set(ADDITIONAL_INCLUDE_DIRS
         dependencies/include/GLAD
+        dependencies/include/SOIL
+        dependencies/include/freetype/include
         dependencies/include)
-set(SOIL_INCLUDE_DIRS
-        dependencies/include/SOIL)
 set(ADDITIONAL_LIBRARY_DIRS
         dependencies/lib)   
 set(ADDITIONAL_RUNTIME_LIBRARY_DIRS
@@ -36,7 +36,6 @@ else()
 endif()
 
 include_directories(${ADDITIONAL_INCLUDE_DIRS})
-include_directories(${SOIL_INCLUDE_DIRS})
 
 find_package(OpenGL REQUIRED)
 
@@ -51,6 +50,12 @@ if(ASSIMP_FOUND)
     include_directories(${ASSIMP_INCLUDE_DIR})
 endif()
 
+#FREETYPE
+find_package(Freetype REQUIRED)
+if(FREETYPE)
+    include_directories(${FREETYPE_INCLUDE_DIR})
+endif()
+
 if(WIN32)
   add_custom_command(TARGET main POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory "${PROJECT_SOURCE_DIR}/dependencies/bin" $<TARGET_FILE_DIR:main>)
   #set(CMAKE_MSVCIDE_RUN_PATH ${ADDITIONAL_RUNTIME_LIBRARY_DIRS})
@@ -60,4 +65,5 @@ else()
   target_compile_options(main PRIVATE -Wnarrowing)
   target_link_libraries(main LINK_PUBLIC ${OPENGL_gl_LIBRARY} glfw rt dl SOIL)
   target_link_libraries(main LINK_PUBLIC ${ASSIMP_LIBRARIES})
+  target_link_libraries(main LINK_PUBLIC ${FREETYPE_LIBRARIES})
 endif()
