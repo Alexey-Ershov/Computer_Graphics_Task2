@@ -26,6 +26,7 @@
 
 /*float iks;
 float igrec;*/
+
 float dist = 2.5f;
 
 struct ModelAttributes
@@ -66,12 +67,14 @@ ShaderProgram model_program;
 ShaderProgram skybox_program;
 ShaderProgram text_program;
 ShaderProgram plasm_ball_program;
+ShaderProgram explosion_program;
 unsigned int cubemapTexture;
 unsigned int skyboxVAO;
 float current_frame;
 GLuint scope_texture;
 std::vector<ModelAttributes> model_attributes;
 std::vector<ModelAttributes> plasm_ball_attributes;
+std::vector<ModelAttributes> explosion_attributes;
 
 
 // process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
@@ -155,8 +158,8 @@ void mouse_button_callback(GLFWwindow* window,
                     )
                 });
     
-    }/* else if(button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
-        model_attributes.push_back(
+    } else if(button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+        /*model_attributes.push_back(
                     {
                         current_frame,
                         glm::vec3(
@@ -174,8 +177,14 @@ void mouse_button_callback(GLFWwindow* window,
                             -5.0f,
                              0.0f
                         )
-                    });
-    }*/
+                    });*/
+
+        /*explosion_attributes.push_back(
+            {
+                current_frame,
+                glm::vec3(1.0f, 1.0f, -2.5f)
+            });*/
+    }
 }
 
 // glfw: whenever the mouse scroll wheel scrolls, this callback is called
@@ -266,7 +275,7 @@ unsigned int loadTexture(char const *path)
     return textureID;
 }
 
-void draw_model(Model model, ModelAttributes &attrs)
+void draw_model(Model &model, ModelAttributes &attrs)
 {
     attrs.real_coords = glm::vec3(
             attrs.coords.x,
@@ -286,8 +295,8 @@ void draw_model(Model model, ModelAttributes &attrs)
     starship_model = glm::translate(starship_model, attrs.real_coords);
 
     starship_model = glm::rotate(starship_model,
-                             3.14095f,
-                             glm::vec3(0.0f, 1.0f, 0.0f));
+                                 3.14095f,
+                                 glm::vec3(0.0f, 1.0f, 0.0f));
 
     /*starship_model = glm::scale(starship_model, glm::vec3(0.2f, 0.2f, 0.2f));*/
 
@@ -295,7 +304,7 @@ void draw_model(Model model, ModelAttributes &attrs)
     model.Draw(model_program);
 }
 
-void draw_plasm_ball(Model model, ModelAttributes &attrs)
+void draw_plasm_ball(Model &model, ModelAttributes &attrs)
 {
     attrs.real_coords = glm::vec3(
             200 * attrs.coords.x *
@@ -322,6 +331,29 @@ void draw_plasm_ball(Model model, ModelAttributes &attrs)
 
     plasm_ball_program.SetUniform("model", starship_model);
     model.Draw(plasm_ball_program);
+}
+
+void draw_exploison(Model &model, ModelAttributes &attrs)
+{
+    explosion_program.StartUseShader();
+    // view/projection transformations
+    glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float) WIDTH / (float) HEIGHT, 0.1f, 100.0f);
+    glm::mat4 view = camera.GetViewMatrix();
+    explosion_program.SetUniform("view", view);
+    explosion_program.SetUniform("projection", projection);
+
+    // First starship.
+    glm::mat4 starship_model = glm::mat4(1.0f);
+    starship_model = glm::translate(starship_model, attrs.coords);
+
+    starship_model =
+            glm::scale(starship_model,
+glm::vec3(/*0.001f + */0.1f * (current_frame - attrs.appearance_timestamp),
+          /*0.001f + */0.1f * (current_frame - attrs.appearance_timestamp),
+          /*0.001f + */0.1f * (current_frame - attrs.appearance_timestamp)));
+
+    explosion_program.SetUniform("model", starship_model);
+    model.Draw(explosion_program);
 }
 
 void draw_skybox()
@@ -426,6 +458,15 @@ void clear_objects()
             break;
         }
     }
+
+    for (auto &it: explosion_attributes) {
+        if (current_frame - it.appearance_timestamp > 0.3) {
+            explosion_attributes.erase(explosion_attributes.begin());
+        
+        } else {
+            break;
+        }
+    }
 }
 
 int initGL()
@@ -520,9 +561,15 @@ int main(int argc, char** argv)
     GL_CHECK_ERRORS;
 
     std::unordered_map<GLenum, std::string> plasm_ball_shaders;
-    plasm_ball_shaders[GL_VERTEX_SHADER] = "model_vertex.glsl";
+    plasm_ball_shaders[GL_VERTEX_SHADER] = "plasm_ball_vertex.glsl";
     plasm_ball_shaders[GL_FRAGMENT_SHADER] = "plasm_ball_fragment.glsl";
     plasm_ball_program = ShaderProgram(plasm_ball_shaders);
+    GL_CHECK_ERRORS;
+
+    std::unordered_map<GLenum, std::string> explosion_shaders;
+    explosion_shaders[GL_VERTEX_SHADER] = "explosion_vertex.glsl";
+    explosion_shaders[GL_FRAGMENT_SHADER] = "explosion_fragment.glsl";
+    explosion_program = ShaderProgram(explosion_shaders);
     GL_CHECK_ERRORS;
 
     glm::mat4 projection = glm::ortho(0.0f,
@@ -745,6 +792,9 @@ int main(int argc, char** argv)
     Model sphere_model(
             "../resources/objects/Quad_Sphere/3d-model.obj");
 
+    /*Model explosion_model(
+            "../resources/objects/asteroid/10464_Asteroid_v1_Iterations-2.obj");*/
+
     /*std::vector<void (draw_model)(Model model, float x, float y)>
             models;*/
 
@@ -840,6 +890,13 @@ int main(int argc, char** argv)
                     
                     deleted_models_pos.insert(i);
                     deleted_plasm_balls_pos.insert(j);
+
+                    explosion_attributes.push_back(
+                        {
+                            current_frame,
+                            model_attributes[i].real_coords
+                        });
+
                     // model_attributes.erase(model_attributes_begin + i);
                     // model_attributes.erase(plasm_ball_attributes_begin + i);
                 }
@@ -858,6 +915,18 @@ int main(int argc, char** argv)
                     model_attributes_begin + *it);
         }
 
+        for (auto it = deleted_plasm_balls_pos.rbegin();
+                it != deleted_plasm_balls_pos.rend(); ++it) {
+
+            /*std::cout << "erase: "
+                      << (*(model_attributes_begin + *it)).
+                            coords.x
+                      << std::endl;*/
+
+            plasm_ball_attributes.erase(
+                    plasm_ball_attributes_begin + *it);
+        }
+
         /*std::cout << "++++++++++++++++" << std::endl;
         std::cout << "current_frame = "
                   << current_frame
@@ -874,6 +943,10 @@ int main(int argc, char** argv)
                       << std::endl;
         }
         std::cout << "------------------" << std::endl << std::endl;*/
+
+        for (auto &it: explosion_attributes) {
+            draw_exploison(sphere_model, it);
+        }
 
         draw_skybox();
 
