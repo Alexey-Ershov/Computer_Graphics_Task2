@@ -84,6 +84,7 @@ std::vector<StarShipAttributes> model_attributes;
 std::vector<ModelAttributes> plasm_ball_attributes;
 std::vector<ModelAttributes> enemy_plasm_ball_attributes;
 std::vector<ModelAttributes> explosion_attributes;
+std::vector<ModelAttributes> dust_attributes;
 
 
 // process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
@@ -357,7 +358,7 @@ void draw_enemy_plasm_ball(Model &model, ModelAttributes &attrs)
             attrs.coords.y - 2 * attrs.coords.y *
                 (current_frame - attrs.appearance_timestamp),
 
-            attrs.coords.z - 2 * attrs.coords.z *
+            attrs.coords.z - 2 * (attrs.coords.z - 3.0f) *
                 (current_frame - attrs.appearance_timestamp));
 
     plasm_ball_program.StartUseShader();
@@ -400,6 +401,32 @@ glm::vec3(/*0.001f + */0.1f * (current_frame - attrs.appearance_timestamp),
 
     explosion_program.SetUniform("model", starship_model);
     model.Draw(explosion_program);
+}
+
+void draw_dust(Model &model, ModelAttributes &attrs)
+{
+    attrs.real_coords = glm::vec3(
+            attrs.coords.x,
+            attrs.coords.y,
+            -100.0f + 100 * (current_frame - attrs.appearance_timestamp));
+
+    plasm_ball_program.StartUseShader();
+    // view/projection transformations
+    glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float) WIDTH / (float) HEIGHT, 0.1f, 100.0f);
+    glm::mat4 view = camera.GetViewMatrix();
+    plasm_ball_program.SetUniform("view", view);
+    plasm_ball_program.SetUniform("projection", projection);
+
+    // First starship.
+    glm::mat4 starship_model = glm::mat4(1.0f);
+    starship_model = glm::translate(starship_model, attrs.real_coords);
+
+    starship_model = glm::scale(starship_model, glm::vec3(0.04f,
+                                                          0.04f,
+                                                          0.04f));
+
+    plasm_ball_program.SetUniform("model", starship_model);
+    model.Draw(plasm_ball_program);
 }
 
 void draw_skybox()
@@ -488,7 +515,7 @@ void RenderText(ShaderProgram &program,
 void clear_objects()
 {
     for (auto &it: model_attributes) {
-        if (current_frame - it.appearance_timestamp > 20) {
+        if (current_frame - it.appearance_timestamp > 10) {
             model_attributes.erase(model_attributes.begin());
         
         } else {
@@ -497,7 +524,7 @@ void clear_objects()
     }
 
     for (auto &it: plasm_ball_attributes) {
-        if (current_frame - it.appearance_timestamp > 5) {
+        if (current_frame - it.appearance_timestamp > 1) {
             plasm_ball_attributes.erase(plasm_ball_attributes.begin());
         
         } else {
@@ -506,7 +533,7 @@ void clear_objects()
     }
 
     for (auto &it: enemy_plasm_ball_attributes) {
-        if (current_frame - it.appearance_timestamp > 5) {
+        if (current_frame - it.appearance_timestamp > 1) {
             enemy_plasm_ball_attributes.erase(
                     enemy_plasm_ball_attributes.begin());
         
@@ -518,6 +545,15 @@ void clear_objects()
     for (auto &it: explosion_attributes) {
         if (current_frame - it.appearance_timestamp > 0.3) {
             explosion_attributes.erase(explosion_attributes.begin());
+        
+        } else {
+            break;
+        }
+    }
+
+    for (auto &it: dust_attributes) {
+        if (current_frame - it.appearance_timestamp > 1) {
+            dust_attributes.erase(dust_attributes.begin());
         
         } else {
             break;
@@ -848,6 +884,9 @@ int main(int argc, char** argv)
     Model sphere_model(
             "../resources/objects/Quad_Sphere/3d-model.obj");
 
+    Model dust_model(
+            "../resources/objects/cube/cube.obj");
+
     /*Model explosion_model(
             "../resources/objects/asteroid/10464_Asteroid_v1_Iterations-2.obj");*/
 
@@ -856,8 +895,8 @@ int main(int argc, char** argv)
 
     srand(time(0));
 
-    float prev_timestamp = 0.0f;
-    bool was_push_back = false;
+    float prev_model_timestamp = 0.0f;
+    float prev_dust_timestamp = 0.0f;
 
     // Render loop.
     while (!glfwWindowShouldClose(window)) {
@@ -867,13 +906,10 @@ int main(int argc, char** argv)
 
         processInput(window);
 
-        /*glClearColor(0.71f, 0.09f, 0.03f, 1.0f);*/
         glClearColor(0.02f, 0.2f, 0.07f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        float rounded_current_frame = round(current_frame);
-        
-        if (not was_push_back and ((int) rounded_current_frame) % 2 == 0) {
+        if (current_frame - prev_model_timestamp > 2.0f) {
             model_attributes.push_back(
                 {
                     current_frame,
@@ -885,38 +921,23 @@ int main(int argc, char** argv)
                     )
                 });
 
-            prev_timestamp = rounded_current_frame;
-            was_push_back = true;
+            prev_model_timestamp = current_frame;
+        }
+
+        if (current_frame - prev_dust_timestamp > 0.1f) {
+            dust_attributes.push_back(
+                {
+                    current_frame,
+                    glm::vec3(
+                        (float) -15 + rand() % 31,
+                        (float) -15 + rand() % 31,
+                        0.0f
+                    )
+                });
+
+            prev_dust_timestamp = current_frame;
         
-        } else if (was_push_back and rounded_current_frame > prev_timestamp) {
-            was_push_back = false;
         }
-
-        /*std::cout << "+++++++++++++++" << std::endl;
-        std::cout << "rounded_current_frame = "
-                  << rounded_current_frame
-                  << std::endl;
-        for (int i = 0; i < model_attributes.size(); i++) {
-            std::cout << "model_attributes["
-                      << i
-                      << "] = "
-                      << model_attributes[i].appearance_timestamp
-                      << " : "
-                      << model_attributes[i].x
-                      << " : "
-                      << model_attributes[i].y
-                      << std::endl;
-        }
-        std::cout << "---------------" << std::endl << std::endl;*/
-
-        /*std::cout << "rand_value = " << -10 + rand() % 21 << std::endl;*/
-
-        /*std::cout << "current_frame = " << rounded_current_frame << std::endl;*/
-
-        /*draw_model(e45_model,
-                   5.0f,
-                   -15.0f,
-                   -15.0f);*/
 
         clear_objects();
 
@@ -931,16 +952,6 @@ int main(int argc, char** argv)
                         it.real_coords
                     });
 
-                /*std::cout << "appearance_timestamp = "
-                          << it.appearance_timestamp
-                          << std::endl
-                          << it.real_coords.x
-                          << " : "
-                          << it.real_coords.y
-                          << " : "
-                          << it.real_coords.z
-                          << std::endl;*/
-
                 it.last_shot_timestamp = current_frame;
             }
         }
@@ -951,6 +962,10 @@ int main(int argc, char** argv)
 
         for (auto &it: enemy_plasm_ball_attributes) {
             draw_enemy_plasm_ball(sphere_model, it);
+        }
+
+        for (auto &it: dust_attributes) {
+            draw_dust(dust_model, it);
         }
 
         std::set<unsigned int> deleted_models_pos;
@@ -964,12 +979,6 @@ int main(int argc, char** argv)
                                   plasm_ball_attributes[j].real_coords) <=
                         dist) {
 
-                    /*std::cout << "model_attributes["
-                              << i
-                              << "].x = "
-                              << model_attributes[i].coords.x
-                              << std::endl;*/
-                    
                     deleted_models_pos.insert(i);
                     deleted_plasm_balls_pos.insert(j);
 
@@ -978,20 +987,12 @@ int main(int argc, char** argv)
                             current_frame,
                             model_attributes[i].real_coords
                         });
-
-                    // model_attributes.erase(model_attributes_begin + i);
-                    // model_attributes.erase(plasm_ball_attributes_begin + i);
                 }
             }
         }
 
         for (auto it = deleted_models_pos.rbegin();
                 it != deleted_models_pos.rend(); ++it) {
-
-            /*std::cout << "erase: "
-                      << (*(model_attributes_begin + *it)).
-                            coords.x
-                      << std::endl;*/
 
             model_attributes.erase(
                     model_attributes_begin + *it);
@@ -1000,31 +1001,9 @@ int main(int argc, char** argv)
         for (auto it = deleted_plasm_balls_pos.rbegin();
                 it != deleted_plasm_balls_pos.rend(); ++it) {
 
-            /*std::cout << "erase: "
-                      << (*(model_attributes_begin + *it)).
-                            coords.x
-                      << std::endl;*/
-
             plasm_ball_attributes.erase(
                     plasm_ball_attributes_begin + *it);
         }
-
-        /*std::cout << "++++++++++++++++" << std::endl;
-        std::cout << "current_frame = "
-                  << current_frame
-                  << std::endl;
-        for (auto &it: plasm_ball_attributes) {
-            std::cout << "appearance_timestamp = "
-                      << it.appearance_timestamp
-                      << std::endl
-                      << it.real_coords.x
-                      << " : "
-                      << it.real_coords.y
-                      << " : "
-                      << it.real_coords.z
-                      << std::endl;
-        }
-        std::cout << "------------------" << std::endl << std::endl;*/
 
         for (auto &it: explosion_attributes) {
             draw_exploison(sphere_model, it);
@@ -1050,9 +1029,8 @@ int main(int argc, char** argv)
     glDeleteVertexArrays(1, &skyboxVAO);
     glDeleteBuffers(1, &skyboxVAO);
 
-    /*glDeleteVertexArrays(1, &VAO);
+    glDeleteVertexArrays(1, &VAO);
     glDeleteBuffers(1, &VBO);
-    glDeleteBuffers(1, &EBO);*/
 
     /*std::cout << "iks = " << iks << std::endl;
     std::cout << "igrec = " << igrec << std::endl;
