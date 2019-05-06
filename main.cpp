@@ -78,13 +78,14 @@ ShaderProgram plasm_ball_program;
 ShaderProgram explosion_program;
 unsigned int cubemapTexture;
 unsigned int skyboxVAO;
-float current_frame;
+float current_frame = 0.0f;
 GLuint scope_texture;
 std::vector<StarShipAttributes> model_attributes;
 std::vector<ModelAttributes> plasm_ball_attributes;
 std::vector<ModelAttributes> enemy_plasm_ball_attributes;
 std::vector<ModelAttributes> explosion_attributes;
 std::vector<ModelAttributes> dust_attributes;
+std::vector<ModelAttributes> asteroid_attributes;
 
 
 // process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
@@ -305,10 +306,43 @@ void draw_model(Model &model, StarShipAttributes &attrs)
     starship_model = glm::translate(starship_model, attrs.real_coords);
 
     starship_model = glm::rotate(starship_model,
-                                 3.14095f,
+                                 3.14f,
                                  glm::vec3(0.0f, 1.0f, 0.0f));
 
     /*starship_model = glm::scale(starship_model, glm::vec3(0.2f, 0.2f, 0.2f));*/
+
+    model_program.SetUniform("model", starship_model);
+    model.Draw(model_program);
+}
+
+void draw_asteroid(Model &model, ModelAttributes &attrs)
+{
+    attrs.real_coords = glm::vec3(
+            attrs.coords.x,
+            attrs.coords.y,
+            -110.0f + 40 * (current_frame - attrs.appearance_timestamp));
+            /*-20.0f);*/
+
+    /*attrs.real_coords = glm::vec3(1.0f, 1.0f, -5.0f);*/
+
+    model_program.StartUseShader();
+    // view/projection transformations
+    glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float) WIDTH / (float) HEIGHT, 0.1f, 100.0f);
+    glm::mat4 view = camera.GetViewMatrix();
+    model_program.SetUniform("view", view);
+    model_program.SetUniform("projection", projection);
+
+    // First starship.
+    glm::mat4 starship_model = glm::mat4(1.0f);
+    starship_model = glm::translate(starship_model, attrs.real_coords);
+
+    starship_model = glm::rotate(starship_model,
+            (current_frame - attrs.appearance_timestamp),
+            glm::vec3(0.0f, 1.0f, 0.0f));
+
+    starship_model = glm::scale(starship_model, glm::vec3(2.0f,
+                                                          2.0f,
+                                                          2.0f));
 
     model_program.SetUniform("model", starship_model);
     model.Draw(model_program);
@@ -554,6 +588,15 @@ void clear_objects()
     for (auto &it: dust_attributes) {
         if (current_frame - it.appearance_timestamp > 1) {
             dust_attributes.erase(dust_attributes.begin());
+        
+        } else {
+            break;
+        }
+    }
+
+    for (auto &it: asteroid_attributes) {
+        if (current_frame - it.appearance_timestamp > 10) {
+            asteroid_attributes.erase(asteroid_attributes.begin());
         
         } else {
             break;
@@ -887,8 +930,8 @@ int main(int argc, char** argv)
     Model dust_model(
             "../resources/objects/cube/cube.obj");
 
-    /*Model explosion_model(
-            "../resources/objects/asteroid/10464_Asteroid_v1_Iterations-2.obj");*/
+    Model asteroid_model(
+            "../resources/objects/asteroid2/A2.obj");
 
     /*std::vector<void (draw_model)(Model model, float x, float y)>
             models;*/
@@ -897,6 +940,7 @@ int main(int argc, char** argv)
 
     float prev_model_timestamp = 0.0f;
     float prev_dust_timestamp = 0.0f;
+    float prev_asteroid_timestamp = 0.0f;
 
     // Render loop.
     while (!glfwWindowShouldClose(window)) {
@@ -908,6 +952,10 @@ int main(int argc, char** argv)
 
         glClearColor(0.02f, 0.2f, 0.07f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        if (prev_model_timestamp == 0.0f) {
+            prev_model_timestamp = current_frame - 1.0f;
+        }
 
         if (current_frame - prev_model_timestamp > 2.0f) {
             model_attributes.push_back(
@@ -939,6 +987,21 @@ int main(int argc, char** argv)
         
         }
 
+        if (current_frame - prev_asteroid_timestamp > 2.0f) {
+            asteroid_attributes.push_back(
+                {
+                    current_frame,
+                    glm::vec3(
+                        (float) -15 + rand() % 31,
+                        (float) -15 + rand() % 31,
+                        0.0f
+                    )
+                });
+
+            prev_asteroid_timestamp = current_frame;
+        
+        }
+
         clear_objects();
 
         for (auto &it: model_attributes) {
@@ -966,6 +1029,10 @@ int main(int argc, char** argv)
 
         for (auto &it: dust_attributes) {
             draw_dust(dust_model, it);
+        }
+
+        for (auto &it: asteroid_attributes) {
+            draw_asteroid(asteroid_model, it);
         }
 
         std::set<unsigned int> deleted_models_pos;
