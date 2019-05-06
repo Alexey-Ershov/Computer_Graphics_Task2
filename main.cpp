@@ -36,6 +36,14 @@ struct ModelAttributes
     glm::vec3 real_coords;
 };
 
+struct StarShipAttributes
+{
+    float appearance_timestamp;
+    float last_shot_timestamp;
+    glm::vec3 coords;
+    glm::vec3 real_coords;
+};
+
 /// Holds all state information relevant to a character as loaded using FreeType
 struct Character
 {
@@ -72,8 +80,9 @@ unsigned int cubemapTexture;
 unsigned int skyboxVAO;
 float current_frame;
 GLuint scope_texture;
-std::vector<ModelAttributes> model_attributes;
+std::vector<StarShipAttributes> model_attributes;
 std::vector<ModelAttributes> plasm_ball_attributes;
+std::vector<ModelAttributes> enemy_plasm_ball_attributes;
 std::vector<ModelAttributes> explosion_attributes;
 
 
@@ -275,7 +284,7 @@ unsigned int loadTexture(char const *path)
     return textureID;
 }
 
-void draw_model(Model &model, ModelAttributes &attrs)
+void draw_model(Model &model, StarShipAttributes &attrs)
 {
     attrs.real_coords = glm::vec3(
             attrs.coords.x,
@@ -312,6 +321,43 @@ void draw_plasm_ball(Model &model, ModelAttributes &attrs)
             200 * attrs.coords.y *
                 (current_frame - attrs.appearance_timestamp),
             150 * attrs.coords.z / abs(attrs.coords.z) *
+                (current_frame - attrs.appearance_timestamp));
+
+    plasm_ball_program.StartUseShader();
+    // view/projection transformations
+    glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float) WIDTH / (float) HEIGHT, 0.1f, 100.0f);
+    glm::mat4 view = camera.GetViewMatrix();
+    plasm_ball_program.SetUniform("view", view);
+    plasm_ball_program.SetUniform("projection", projection);
+
+    // First starship.
+    glm::mat4 starship_model = glm::mat4(1.0f);
+    starship_model = glm::translate(starship_model, attrs.real_coords);
+
+    starship_model = glm::scale(starship_model, glm::vec3(0.005f,
+                                                          0.005f,
+                                                          0.005f));
+
+    plasm_ball_program.SetUniform("model", starship_model);
+    model.Draw(plasm_ball_program);
+}
+
+void draw_enemy_plasm_ball(Model &model, ModelAttributes &attrs)
+{
+    attrs.real_coords = glm::vec3(
+            /*200 * attrs.coords.x *
+                (current_frame - attrs.appearance_timestamp),
+            200 * attrs.coords.y *
+                (current_frame - attrs.appearance_timestamp),*/
+            /*-150 * attrs.coords.z / abs(attrs.coords.z) *
+                (current_frame - attrs.appearance_timestamp)*/
+            attrs.coords.x - 2 * attrs.coords.x *
+                (current_frame - attrs.appearance_timestamp),
+
+            attrs.coords.y - 2 * attrs.coords.y *
+                (current_frame - attrs.appearance_timestamp),
+
+            attrs.coords.z - 2 * attrs.coords.z *
                 (current_frame - attrs.appearance_timestamp));
 
     plasm_ball_program.StartUseShader();
@@ -453,6 +499,16 @@ void clear_objects()
     for (auto &it: plasm_ball_attributes) {
         if (current_frame - it.appearance_timestamp > 5) {
             plasm_ball_attributes.erase(plasm_ball_attributes.begin());
+        
+        } else {
+            break;
+        }
+    }
+
+    for (auto &it: enemy_plasm_ball_attributes) {
+        if (current_frame - it.appearance_timestamp > 5) {
+            enemy_plasm_ball_attributes.erase(
+                    enemy_plasm_ball_attributes.begin());
         
         } else {
             break;
@@ -819,14 +875,15 @@ int main(int argc, char** argv)
         
         if (not was_push_back and ((int) rounded_current_frame) % 2 == 0) {
             model_attributes.push_back(
-                    {
-                        current_frame,
-                        glm::vec3(
-                            (float) -15 + rand() % 31,
-                            (float) -15 + rand() % 31,
-                            0.0f
-                        )
-                    });
+                {
+                    current_frame,
+                    current_frame + 1.0f,
+                    glm::vec3(
+                        (float) -15 + rand() % 31,
+                        (float) -15 + rand() % 31,
+                        0.0f
+                    )
+                });
 
             prev_timestamp = rounded_current_frame;
             was_push_back = true;
@@ -865,10 +922,35 @@ int main(int argc, char** argv)
 
         for (auto &it: model_attributes) {
             draw_model(e45_model, it);
+            if (it.real_coords.z < 0.0f and
+                    current_frame - it.last_shot_timestamp > 1.0f) {
+                
+                enemy_plasm_ball_attributes.push_back(
+                    {
+                        current_frame,
+                        it.real_coords
+                    });
+
+                /*std::cout << "appearance_timestamp = "
+                          << it.appearance_timestamp
+                          << std::endl
+                          << it.real_coords.x
+                          << " : "
+                          << it.real_coords.y
+                          << " : "
+                          << it.real_coords.z
+                          << std::endl;*/
+
+                it.last_shot_timestamp = current_frame;
+            }
         }
 
         for (auto &it: plasm_ball_attributes) {
             draw_plasm_ball(sphere_model, it);
+        }
+
+        for (auto &it: enemy_plasm_ball_attributes) {
+            draw_enemy_plasm_ball(sphere_model, it);
         }
 
         std::set<unsigned int> deleted_models_pos;
