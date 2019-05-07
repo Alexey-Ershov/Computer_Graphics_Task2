@@ -36,6 +36,14 @@ struct ModelAttributes
     glm::vec3 real_coords;
 };
 
+struct AsteroidFragmentAttributes
+{
+    float appearance_timestamp;
+    glm::vec3 coords;
+    glm::vec3 direction;
+};
+
+
 struct StarShipAttributes
 {
     float appearance_timestamp;
@@ -86,6 +94,7 @@ std::vector<ModelAttributes> enemy_plasm_ball_attributes;
 std::vector<ModelAttributes> explosion_attributes;
 std::vector<ModelAttributes> dust_attributes;
 std::vector<ModelAttributes> asteroid_attributes;
+std::vector<AsteroidFragmentAttributes> asteroid_fragment_attributes;
 
 
 // process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
@@ -320,7 +329,7 @@ void draw_asteroid(Model &model, ModelAttributes &attrs)
     attrs.real_coords = glm::vec3(
             attrs.coords.x,
             attrs.coords.y,
-            -110.0f + 40 * (current_frame - attrs.appearance_timestamp));
+            -110.0f + 30 * (current_frame - attrs.appearance_timestamp));
             /*-20.0f);*/
 
     /*attrs.real_coords = glm::vec3(1.0f, 1.0f, -5.0f);*/
@@ -343,6 +352,41 @@ void draw_asteroid(Model &model, ModelAttributes &attrs)
     starship_model = glm::scale(starship_model, glm::vec3(2.0f,
                                                           2.0f,
                                                           2.0f));
+
+    model_program.SetUniform("model", starship_model);
+    model.Draw(model_program);
+}
+
+void draw_asteroid_fragment(Model &model, AsteroidFragmentAttributes &attrs)
+{
+    glm::vec3 real_coords(
+            attrs.coords.x + 100 * attrs.direction.x *
+                    (current_frame - attrs.appearance_timestamp),
+            attrs.coords.y + 100 * attrs.direction.y *
+                    (current_frame - attrs.appearance_timestamp),
+            attrs.coords.z + 100 * attrs.direction.z *
+                    (current_frame - attrs.appearance_timestamp));
+
+    /*attrs.real_coords = glm::vec3(1.0f, 1.0f, -5.0f);*/
+
+    model_program.StartUseShader();
+    // view/projection transformations
+    glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float) WIDTH / (float) HEIGHT, 0.1f, 100.0f);
+    glm::mat4 view = camera.GetViewMatrix();
+    model_program.SetUniform("view", view);
+    model_program.SetUniform("projection", projection);
+
+    // First starship.
+    glm::mat4 starship_model = glm::mat4(1.0f);
+    starship_model = glm::translate(starship_model, real_coords);
+
+    starship_model = glm::rotate(starship_model,
+            (current_frame - attrs.appearance_timestamp),
+            glm::vec3(0.0f, 1.0f, 0.0f));
+
+    /*starship_model = glm::scale(starship_model, glm::vec3(0.5f,
+                                                          0.5f,
+                                                          0.5f));*/
 
     model_program.SetUniform("model", starship_model);
     model.Draw(model_program);
@@ -597,6 +641,16 @@ void clear_objects()
     for (auto &it: asteroid_attributes) {
         if (current_frame - it.appearance_timestamp > 10) {
             asteroid_attributes.erase(asteroid_attributes.begin());
+        
+        } else {
+            break;
+        }
+    }
+
+    for (auto &it: asteroid_fragment_attributes) {
+        if (current_frame - it.appearance_timestamp > 0.3) {
+            asteroid_fragment_attributes.erase(
+                    asteroid_fragment_attributes.begin());
         
         } else {
             break;
@@ -963,8 +1017,8 @@ int main(int argc, char** argv)
                     current_frame,
                     current_frame + 1.0f,
                     glm::vec3(
-                        (float) -15 + rand() % 31,
-                        (float) -15 + rand() % 31,
+                        (float) -20 + rand() % 41,
+                        (float) -20 + rand() % 41,
                         0.0f
                     )
                 });
@@ -977,8 +1031,8 @@ int main(int argc, char** argv)
                 {
                     current_frame,
                     glm::vec3(
-                        (float) -15 + rand() % 31,
-                        (float) -15 + rand() % 31,
+                        (float) -20 + rand() % 41,
+                        (float) -20 + rand() % 41,
                         0.0f
                     )
                 });
@@ -992,8 +1046,8 @@ int main(int argc, char** argv)
                 {
                     current_frame,
                     glm::vec3(
-                        (float) -15 + rand() % 31,
-                        (float) -15 + rand() % 31,
+                        (float) -20 + rand() % 41,
+                        (float) -20 + rand() % 41,
                         0.0f
                     )
                 });
@@ -1007,7 +1061,7 @@ int main(int argc, char** argv)
         for (auto &it: model_attributes) {
             draw_model(e45_model, it);
             if (it.real_coords.z < 0.0f and
-                    current_frame - it.last_shot_timestamp > 1.0f) {
+                    current_frame - it.last_shot_timestamp > 1.5f) {
                 
                 enemy_plasm_ball_attributes.push_back(
                     {
@@ -1036,8 +1090,10 @@ int main(int argc, char** argv)
         }
 
         std::set<unsigned int> deleted_models_pos;
+        std::set<unsigned int> deleted_asteroids_pos;
         std::set<unsigned int> deleted_plasm_balls_pos;
         auto model_attributes_begin = model_attributes.begin();
+        auto asteroid_attributes_begin = asteroid_attributes.begin();
         auto plasm_ball_attributes_begin = plasm_ball_attributes.begin();
 
         for (unsigned int i = 0; i < model_attributes.size(); i++) {
@@ -1058,11 +1114,71 @@ int main(int argc, char** argv)
             }
         }
 
+        for (unsigned int i = 0; i < asteroid_attributes.size(); i++) {
+            for (unsigned int j = 0; j < plasm_ball_attributes.size(); j++) {
+                if (glm::distance(asteroid_attributes[i].real_coords,
+                                  plasm_ball_attributes[j].real_coords) <=
+                        dist) {
+
+                    deleted_asteroids_pos.insert(i);
+                    deleted_plasm_balls_pos.insert(j);
+
+                    explosion_attributes.push_back(
+                        {
+                            current_frame,
+                            asteroid_attributes[i].real_coords
+                        });
+
+                    asteroid_fragment_attributes.push_back(
+                        {
+                            current_frame,
+                            asteroid_attributes[i].real_coords,
+                            glm::vec3(1.0f, 0.0f, 0.0f)
+                        });
+
+                    asteroid_fragment_attributes.push_back(
+                        {
+                            current_frame,
+                            asteroid_attributes[i].real_coords,
+                            glm::vec3(-1.0f, 0.0f, 0.0f)
+                        });
+
+                    asteroid_fragment_attributes.push_back(
+                        {
+                            current_frame,
+                            asteroid_attributes[i].real_coords,
+                            glm::vec3(0.0f, 1.0f, 0.0f)
+                        });
+
+                    asteroid_fragment_attributes.push_back(
+                        {
+                            current_frame,
+                            asteroid_attributes[i].real_coords,
+                            glm::vec3(0.0f, -1.0f, 0.0f)
+                        });
+
+                    asteroid_fragment_attributes.push_back(
+                        {
+                            current_frame,
+                            asteroid_attributes[i].real_coords,
+                            glm::vec3(0.0f, 0.0f, -1.0f)
+                        });
+                }
+            }
+        }
+
         for (auto it = deleted_models_pos.rbegin();
                 it != deleted_models_pos.rend(); ++it) {
 
             model_attributes.erase(
                     model_attributes_begin + *it);
+        }
+
+        for (auto it = deleted_asteroids_pos.rbegin();
+                it != deleted_asteroids_pos.rend(); ++it) {
+
+            asteroid_attributes.erase(
+                    asteroid_attributes_begin + *it);
         }
 
         for (auto it = deleted_plasm_balls_pos.rbegin();
@@ -1074,6 +1190,10 @@ int main(int argc, char** argv)
 
         for (auto &it: explosion_attributes) {
             draw_exploison(sphere_model, it);
+        }
+
+        for (auto &it: asteroid_fragment_attributes) {
+            draw_asteroid_fragment(asteroid_model, it);
         }
 
         draw_skybox();
