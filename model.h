@@ -34,6 +34,8 @@ public:
 
     /*  Functions   */
     // constructor, expects a filepath to a 3D model.
+    Model() = default;
+
     Model(string const &path, bool gamma = false) : gammaCorrection(gamma)
     {
         loadModel(path);

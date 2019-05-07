@@ -29,11 +29,21 @@ float igrec;*/
 
 float dist = 2.5f;
 
+enum ObjTypes
+{
+    ASTEROID1,
+    ASTEROID2,
+    PLASM_BALL,
+    DUST
+};
+
 struct ModelAttributes
 {
     float appearance_timestamp;
     glm::vec3 coords;
     glm::vec3 real_coords;
+    Model *model;
+    ObjTypes obj_type;
 };
 
 struct AsteroidFragmentAttributes
@@ -42,7 +52,6 @@ struct AsteroidFragmentAttributes
     glm::vec3 coords;
     glm::vec3 direction;
 };
-
 
 struct StarShipAttributes
 {
@@ -88,6 +97,7 @@ unsigned int cubemapTexture;
 unsigned int skyboxVAO;
 float current_frame = 0.0f;
 GLuint scope_texture;
+Model sphere_model;
 std::vector<StarShipAttributes> model_attributes;
 std::vector<ModelAttributes> plasm_ball_attributes;
 std::vector<ModelAttributes> enemy_plasm_ball_attributes;
@@ -175,7 +185,10 @@ void mouse_button_callback(GLFWwindow* window,
                         camera.Front.x,
                         camera.Front.y,
                         camera.Front.z
-                    )
+                    ),
+                    glm::vec3(),
+                    &sphere_model,
+                    PLASM_BALL
                 });
     
     } else if(button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
@@ -324,13 +337,17 @@ void draw_model(Model &model, StarShipAttributes &attrs)
     model.Draw(model_program);
 }
 
-void draw_asteroid(Model &model, ModelAttributes &attrs)
+void draw_asteroid(ModelAttributes &attrs)
 {
     attrs.real_coords = glm::vec3(
             attrs.coords.x,
             attrs.coords.y,
             -110.0f + 30 * (current_frame - attrs.appearance_timestamp));
-            /*-20.0f);*/
+
+    /*attrs.real_coords = glm::vec3(
+            attrs.coords.x,
+            attrs.coords.y,
+            attrs.coords.z);*/
 
     /*attrs.real_coords = glm::vec3(1.0f, 1.0f, -5.0f);*/
 
@@ -345,16 +362,27 @@ void draw_asteroid(Model &model, ModelAttributes &attrs)
     glm::mat4 starship_model = glm::mat4(1.0f);
     starship_model = glm::translate(starship_model, attrs.real_coords);
 
-    starship_model = glm::rotate(starship_model,
-            (current_frame - attrs.appearance_timestamp),
-            glm::vec3(0.0f, 1.0f, 0.0f));
+    if (attrs.obj_type == ASTEROID1) {
+        starship_model = glm::rotate(starship_model,
+                (current_frame - attrs.appearance_timestamp),
+                glm::vec3(0.0f, 1.0f, 0.0f));
 
-    starship_model = glm::scale(starship_model, glm::vec3(2.0f,
-                                                          2.0f,
-                                                          2.0f));
+        starship_model = glm::scale(starship_model, glm::vec3(2.0f,
+                                                              2.0f,
+                                                              2.0f));
+
+    } else {
+        starship_model = glm::rotate(starship_model,
+                4 *(current_frame - attrs.appearance_timestamp),
+                glm::vec3(1.0f, 1.0f, 0.0f));
+    
+        starship_model = glm::scale(starship_model, glm::vec3(0.05f,
+                                                              0.05f,
+                                                              0.05f));
+    }
 
     model_program.SetUniform("model", starship_model);
-    model.Draw(model_program);
+    attrs.model->Draw(model_program);
 }
 
 void draw_asteroid_fragment(Model &model, AsteroidFragmentAttributes &attrs)
@@ -978,14 +1006,17 @@ int main(int argc, char** argv)
     Model e45_model(
             "../resources/objects/E-45-Aircraft/E 45 Aircraft_obj.obj");
 
-    Model sphere_model(
+    sphere_model = Model(
             "../resources/objects/Quad_Sphere/3d-model.obj");
 
     Model dust_model(
             "../resources/objects/cube/cube.obj");
 
     Model asteroid_model(
-            "../resources/objects/asteroid2/A2.obj");
+            "../resources/objects/asteroid/A2.obj");
+
+    Model asteroid_model2(
+            "../resources/objects/asteroid2/model/rock_by_dommk.obj");
 
     /*std::vector<void (draw_model)(Model model, float x, float y)>
             models;*/
@@ -995,6 +1026,7 @@ int main(int argc, char** argv)
     float prev_model_timestamp = 0.0f;
     float prev_dust_timestamp = 0.0f;
     float prev_asteroid_timestamp = 0.0f;
+    int type_of_asteroid = 0;
 
     // Render loop.
     while (!glfwWindowShouldClose(window)) {
@@ -1011,7 +1043,7 @@ int main(int argc, char** argv)
             prev_model_timestamp = current_frame - 1.0f;
         }
 
-        if (current_frame - prev_model_timestamp > 2.0f) {
+        /*if (current_frame - prev_model_timestamp > 2.0f) {
             model_attributes.push_back(
                 {
                     current_frame,
@@ -1024,6 +1056,41 @@ int main(int argc, char** argv)
                 });
 
             prev_model_timestamp = current_frame;
+        }*/
+
+        if (current_frame - prev_asteroid_timestamp > 2.0f) {
+            if (type_of_asteroid == 0) {
+                asteroid_attributes.push_back(
+                    {
+                        current_frame,
+                        glm::vec3(
+                            (float) -20 + rand() % 41,
+                            (float) -20 + rand() % 41,
+                            0.0f
+                        ),
+                        glm::vec3(),
+                        &asteroid_model,
+                        ASTEROID1
+                    });
+            
+            } else {
+                asteroid_attributes.push_back(
+                    {
+                        current_frame,
+                        glm::vec3(
+                            (float) -20 + rand() % 41,
+                            (float) -20 + rand() % 41,
+                            0.0f
+                        ),
+                        glm::vec3(),
+                        &asteroid_model2,
+                        ASTEROID2
+                    });
+            }
+
+            type_of_asteroid = (type_of_asteroid + 1) % 2;
+            prev_asteroid_timestamp = current_frame;
+        
         }
 
         if (current_frame - prev_dust_timestamp > 0.1f) {
@@ -1034,25 +1101,13 @@ int main(int argc, char** argv)
                         (float) -20 + rand() % 41,
                         (float) -20 + rand() % 41,
                         0.0f
-                    )
+                    ),
+                    glm::vec3(),
+                    &dust_model,
+                    DUST
                 });
 
             prev_dust_timestamp = current_frame;
-        
-        }
-
-        if (current_frame - prev_asteroid_timestamp > 2.0f) {
-            asteroid_attributes.push_back(
-                {
-                    current_frame,
-                    glm::vec3(
-                        (float) -20 + rand() % 41,
-                        (float) -20 + rand() % 41,
-                        0.0f
-                    )
-                });
-
-            prev_asteroid_timestamp = current_frame;
         
         }
 
@@ -1066,7 +1121,10 @@ int main(int argc, char** argv)
                 enemy_plasm_ball_attributes.push_back(
                     {
                         current_frame,
-                        it.real_coords
+                        it.real_coords,
+                        glm::vec3(),
+                        &sphere_model,
+                        PLASM_BALL
                     });
 
                 it.last_shot_timestamp = current_frame;
@@ -1086,7 +1144,7 @@ int main(int argc, char** argv)
         }
 
         for (auto &it: asteroid_attributes) {
-            draw_asteroid(asteroid_model, it);
+            draw_asteroid(it);
         }
 
         std::set<unsigned int> deleted_models_pos;
@@ -1108,7 +1166,9 @@ int main(int argc, char** argv)
                     explosion_attributes.push_back(
                         {
                             current_frame,
-                            model_attributes[i].real_coords
+                            model_attributes[i].real_coords,
+                            glm::vec3(),
+                            &sphere_model
                         });
                 }
             }
@@ -1126,7 +1186,9 @@ int main(int argc, char** argv)
                     explosion_attributes.push_back(
                         {
                             current_frame,
-                            asteroid_attributes[i].real_coords
+                            asteroid_attributes[i].real_coords,
+                            glm::vec3(),
+                            &sphere_model
                         });
 
                     asteroid_fragment_attributes.push_back(
