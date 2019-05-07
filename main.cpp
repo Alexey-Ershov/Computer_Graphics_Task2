@@ -24,17 +24,21 @@
 #include <cmath>
 
 
-/*float iks;
-float igrec;*/
+#define DIST 2.5f
 
-float dist = 2.5f;
+/*float iks;
+float igrec;
+int coeff = 200;*/
 
 enum ObjTypes
 {
     ASTEROID1,
     ASTEROID2,
     PLASM_BALL,
-    DUST
+    DUST,
+    E45,
+    WRAITH,
+    VULCAN
 };
 
 struct ModelAttributes
@@ -59,6 +63,8 @@ struct StarShipAttributes
     float last_shot_timestamp;
     glm::vec3 coords;
     glm::vec3 real_coords;
+    Model *model;
+    ObjTypes obj_type;
 };
 
 /// Holds all state information relevant to a character as loaded using FreeType
@@ -127,11 +133,13 @@ void processInput(GLFWwindow *window)
 
     if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
         camera.ProcessKeyboard(LEFT, deltaTime);
+        // coeff--;
         // iks--;
     }
 
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
         camera.ProcessKeyboard(RIGHT, deltaTime);
+        // coeff++;
         // iks++;
     }
 }
@@ -308,13 +316,17 @@ unsigned int loadTexture(char const *path)
     return textureID;
 }
 
-void draw_model(Model &model, StarShipAttributes &attrs)
+void draw_model(StarShipAttributes &attrs)
 {
     attrs.real_coords = glm::vec3(
             attrs.coords.x,
             attrs.coords.y,
             -100.0f + 20 * (current_frame - attrs.appearance_timestamp));
-            /*-20.0f);*/
+
+    /*attrs.real_coords = glm::vec3(
+            attrs.coords.x,
+            attrs.coords.y,
+            attrs.coords.z);*/
 
     model_program.StartUseShader();
     // view/projection transformations
@@ -323,18 +335,28 @@ void draw_model(Model &model, StarShipAttributes &attrs)
     model_program.SetUniform("view", view);
     model_program.SetUniform("projection", projection);
 
-    // First starship.
     glm::mat4 starship_model = glm::mat4(1.0f);
     starship_model = glm::translate(starship_model, attrs.real_coords);
 
-    starship_model = glm::rotate(starship_model,
-                                 3.14f,
-                                 glm::vec3(0.0f, 1.0f, 0.0f));
+    if (attrs.obj_type != WRAITH) {
+        starship_model = glm::rotate(starship_model,
+                                     3.14f,
+                                     glm::vec3(0.0f, 1.0f, 0.0f));
 
-    /*starship_model = glm::scale(starship_model, glm::vec3(0.2f, 0.2f, 0.2f));*/
+        if (attrs.obj_type == VULCAN) {
+            starship_model = glm::scale(starship_model, glm::vec3(2.0f,
+                                                                  2.0f,
+                                                                  2.0f));
+        }
+    
+    } else {
+        starship_model = glm::scale(starship_model, glm::vec3(0.01f,
+                                                              0.01f,
+                                                              0.01f));
+    }
 
     model_program.SetUniform("model", starship_model);
-    model.Draw(model_program);
+    attrs.model->Draw(model_program);
 }
 
 void draw_asteroid(ModelAttributes &attrs)
@@ -412,9 +434,9 @@ void draw_asteroid_fragment(Model &model, AsteroidFragmentAttributes &attrs)
             (current_frame - attrs.appearance_timestamp),
             glm::vec3(0.0f, 1.0f, 0.0f));
 
-    /*starship_model = glm::scale(starship_model, glm::vec3(0.5f,
-                                                          0.5f,
-                                                          0.5f));*/
+    starship_model = glm::scale(starship_model, glm::vec3(0.025f,
+                                                          0.025f,
+                                                          0.025f));
 
     model_program.SetUniform("model", starship_model);
     model.Draw(model_program);
@@ -1000,11 +1022,14 @@ int main(int argc, char** argv)
     /*Model nanosuit_model(
             "../resources/objects/nanosuit/nanosuit.obj");*/
 
-    /*Model vulcan_starship_model(
-            "../resources/objects/vulcan_dkyr_class/vulcan_dkyr_class.obj");*/
+    Model vulcan_starship_model(
+            "../resources/objects/vulcan_dkyr_class/vulcan_dkyr_class.obj");
 
     Model e45_model(
             "../resources/objects/E-45-Aircraft/E 45 Aircraft_obj.obj");
+
+    Model wraith_model(
+            "../resources/objects/cwwf1303rf28-W/Wraith Raider Starship/Wraith Raider Starship.obj");
 
     sphere_model = Model(
             "../resources/objects/Quad_Sphere/3d-model.obj");
@@ -1027,6 +1052,7 @@ int main(int argc, char** argv)
     float prev_dust_timestamp = 0.0f;
     float prev_asteroid_timestamp = 0.0f;
     int type_of_asteroid = 0;
+    int type_of_starship = 0;
 
     // Render loop.
     while (!glfwWindowShouldClose(window)) {
@@ -1043,20 +1069,56 @@ int main(int argc, char** argv)
             prev_model_timestamp = current_frame - 1.0f;
         }
 
-        /*if (current_frame - prev_model_timestamp > 2.0f) {
-            model_attributes.push_back(
-                {
-                    current_frame,
-                    current_frame + 1.0f,
-                    glm::vec3(
-                        (float) -20 + rand() % 41,
-                        (float) -20 + rand() % 41,
-                        0.0f
-                    )
-                });
+        if (current_frame - prev_model_timestamp > 2.0f) {
+            if (type_of_starship == 0 or type_of_starship == 2) {
+                model_attributes.push_back(
+                    {
+                        current_frame,
+                        current_frame + 1.0f,
+                        glm::vec3(
+                            (float) -20 + rand() % 41,
+                            (float) -20 + rand() % 41,
+                            0.0f
+                        ),
+                        glm::vec3(),
+                        &e45_model,
+                        E45
+                    });
+            
+            } else if (type_of_starship == 1 or type_of_starship == 3) {
+                model_attributes.push_back(
+                    {
+                        current_frame,
+                        current_frame + 1.0f,
+                        glm::vec3(
+                            (float) -20 + rand() % 41,
+                            (float) -20 + rand() % 41,
+                            0.0f
+                        ),
+                        glm::vec3(),
+                        &wraith_model,
+                        WRAITH
+                    });
+            
+            } else {
+                model_attributes.push_back(
+                    {
+                        current_frame,
+                        current_frame + 1.0f,
+                        glm::vec3(
+                            (float) -20 + rand() % 41,
+                            (float) -20 + rand() % 41,
+                            0.0f
+                        ),
+                        glm::vec3(),
+                        &vulcan_starship_model,
+                        VULCAN
+                    });
+            }
 
+            type_of_starship = (type_of_starship + 1) % 5;
             prev_model_timestamp = current_frame;
-        }*/
+        }
 
         if (current_frame - prev_asteroid_timestamp > 2.0f) {
             if (type_of_asteroid == 0) {
@@ -1113,8 +1175,21 @@ int main(int argc, char** argv)
 
         clear_objects();
 
+        /*StarShipAttributes it
+        {
+            current_frame,
+            current_frame + 1.0f,
+            glm::vec3(
+                1.0f,
+                1.0f,
+                -15.0f
+            )
+        };
+
+        draw_model(wraith_model, it);*/
+
         for (auto &it: model_attributes) {
-            draw_model(e45_model, it);
+            draw_model(it);
             if (it.real_coords.z < 0.0f and
                     current_frame - it.last_shot_timestamp > 1.5f) {
                 
@@ -1158,7 +1233,7 @@ int main(int argc, char** argv)
             for (unsigned int j = 0; j < plasm_ball_attributes.size(); j++) {
                 if (glm::distance(model_attributes[i].real_coords,
                                   plasm_ball_attributes[j].real_coords) <=
-                        dist) {
+                        DIST) {
 
                     deleted_models_pos.insert(i);
                     deleted_plasm_balls_pos.insert(j);
@@ -1176,6 +1251,11 @@ int main(int argc, char** argv)
 
         for (unsigned int i = 0; i < asteroid_attributes.size(); i++) {
             for (unsigned int j = 0; j < plasm_ball_attributes.size(); j++) {
+                float dist = DIST;
+                if (asteroid_attributes[i].obj_type == ASTEROID2) {
+                    dist += 0.5f;
+                }
+
                 if (glm::distance(asteroid_attributes[i].real_coords,
                                   plasm_ball_attributes[j].real_coords) <=
                         dist) {
@@ -1255,7 +1335,7 @@ int main(int argc, char** argv)
         }
 
         for (auto &it: asteroid_fragment_attributes) {
-            draw_asteroid_fragment(asteroid_model, it);
+            draw_asteroid_fragment(asteroid_model2, it);
         }
 
         draw_skybox();
@@ -1268,6 +1348,13 @@ int main(int argc, char** argv)
                    415.0f,
                    0.5f,
                    glm::vec3(1.0f, 1.0f, 1.0f));
+
+        /*RenderText(text_program,
+                   std::to_string(coeff),
+                   0.0f,
+                   0.0f,
+                   0.5f,
+                   glm::vec3(1.0f, 1.0f, 1.0f));*/
 
         glfwSwapBuffers(window);
         glfwPollEvents();
@@ -1283,7 +1370,7 @@ int main(int argc, char** argv)
 
     /*std::cout << "iks = " << iks << std::endl;
     std::cout << "igrec = " << igrec << std::endl;
-    std::cout << "dist = " << dist << std::endl;*/
+    std::cout << "DIST = " << DIST << std::endl;*/
 
     glfwTerminate();
     return 0;
