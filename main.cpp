@@ -25,10 +25,12 @@
 
 
 #define DIST 2.5f
+#define OUTRO_TIMEOUT 10
 
-/*float iks;
-float igrec;
-int coeff = 200;*/
+float iks = 555.0f;
+float igrec = 415.0f;
+float font_size = 0.5f;
+int coeff = 200;
 
 enum ObjTypes
 {
@@ -38,16 +40,29 @@ enum ObjTypes
     DUST,
     E45,
     WRAITH,
-    VULCAN
+    VULCAN,
+    EXPLOSION
 };
 
 struct ModelAttributes
 {
     float appearance_timestamp;
     glm::vec3 coords;
-    glm::vec3 real_coords;
     Model *model;
     ObjTypes obj_type;
+    glm::vec3 real_coords;
+    bool was_hit;
+
+    ModelAttributes(float ap_ts,
+                    glm::vec3 c,
+                    Model *m,
+                    ObjTypes ot) : appearance_timestamp {ap_ts},
+                                   coords {c},
+                                   model {m},
+                                   obj_type {ot},
+                                   real_coords {glm::vec3()},
+                                   was_hit {false}
+                                   {};
 };
 
 struct AsteroidFragmentAttributes
@@ -62,9 +77,23 @@ struct StarShipAttributes
     float appearance_timestamp;
     float last_shot_timestamp;
     glm::vec3 coords;
-    glm::vec3 real_coords;
     Model *model;
     ObjTypes obj_type;
+    glm::vec3 real_coords;
+    bool was_hit;
+
+    StarShipAttributes(float ap_ts,
+                       float lst,
+                       glm::vec3 c,
+                       Model *m,
+                       ObjTypes ot) : appearance_timestamp {ap_ts},
+                                      last_shot_timestamp {lst},
+                                      coords {c},
+                                      model {m},
+                                      obj_type {ot},
+                                      real_coords {glm::vec3()},
+                                      was_hit {false}
+                                      {};
 };
 
 /// Holds all state information relevant to a character as loaded using FreeType
@@ -93,6 +122,11 @@ bool firstMouse = true;
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
 
+float current_frame = 0.0f;
+int score = 0;
+int health = 100;
+bool game_over = false;
+
 ShaderProgram program;
 ShaderProgram model_program;
 ShaderProgram skybox_program;
@@ -101,7 +135,6 @@ ShaderProgram plasm_ball_program;
 ShaderProgram explosion_program;
 unsigned int cubemapTexture;
 unsigned int skyboxVAO;
-float current_frame = 0.0f;
 GLuint scope_texture;
 Model sphere_model;
 std::vector<StarShipAttributes> model_attributes;
@@ -122,25 +155,33 @@ void processInput(GLFWwindow *window)
     }
 
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
-        camera.ProcessKeyboard(FORWARD, deltaTime);
-        // igrec++;
+        // camera.ProcessKeyboard(FORWARD, deltaTime);
+        igrec += 1.0f;
     }
 
     if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
-        camera.ProcessKeyboard(BACKWARD, deltaTime);
-        // igrec--;
+        // camera.ProcessKeyboard(BACKWARD, deltaTime);
+        igrec -= 1.0f;
     }
 
     if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
-        camera.ProcessKeyboard(LEFT, deltaTime);
+        // camera.ProcessKeyboard(LEFT, deltaTime);
         // coeff--;
-        // iks--;
+        iks -= 1.0f;
     }
 
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
-        camera.ProcessKeyboard(RIGHT, deltaTime);
+        // camera.ProcessKeyboard(RIGHT, deltaTime);
         // coeff++;
-        // iks++;
+        iks += 1.0f;
+    }
+
+    if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) {
+        font_size -= 0.005f;
+    }
+
+    if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) {
+        font_size += 0.005f;
     }
 }
 
@@ -178,7 +219,9 @@ void mouse_button_callback(GLFWwindow* window,
                            int action,
                            int mods)
 {
-    if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS) {
+    if (button == GLFW_MOUSE_BUTTON_RIGHT and
+            action == GLFW_PRESS and
+            not game_over) {
         
         /*std::cout << "+++++++++++++++++++" << std::endl;
         std::cout << "xpos = " << camera.Front.x << std::endl;
@@ -186,18 +229,16 @@ void mouse_button_callback(GLFWwindow* window,
         std::cout << "zpos = " << camera.Front.z << std::endl;
         std::cout << "-------------------" << std::endl << std::endl;*/
 
-        plasm_ball_attributes.push_back(
-                {
-                    current_frame,
-                    glm::vec3(
-                        camera.Front.x,
-                        camera.Front.y,
-                        camera.Front.z
-                    ),
-                    glm::vec3(),
-                    &sphere_model,
-                    PLASM_BALL
-                });
+        plasm_ball_attributes.push_back(ModelAttributes(
+            current_frame,
+            glm::vec3(
+                camera.Front.x,
+                camera.Front.y,
+                camera.Front.z
+            ),
+            &sphere_model,
+            PLASM_BALL
+        ));
     
     } else if(button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
         /*model_attributes.push_back(
@@ -1051,6 +1092,7 @@ int main(int argc, char** argv)
     float prev_model_timestamp = 0.0f;
     float prev_dust_timestamp = 0.0f;
     float prev_asteroid_timestamp = 0.0f;
+    float game_over_timestamp = 0.0f;
     int type_of_asteroid = 0;
     int type_of_starship = 0;
 
@@ -1071,49 +1113,43 @@ int main(int argc, char** argv)
 
         if (current_frame - prev_model_timestamp > 2.0f) {
             if (type_of_starship == 0 or type_of_starship == 2) {
-                model_attributes.push_back(
-                    {
-                        current_frame,
-                        current_frame + 1.0f,
-                        glm::vec3(
-                            (float) -20 + rand() % 41,
-                            (float) -20 + rand() % 41,
-                            0.0f
-                        ),
-                        glm::vec3(),
-                        &e45_model,
-                        E45
-                    });
+                model_attributes.push_back(StarShipAttributes(
+                    current_frame,
+                    current_frame + 1.0f,
+                    glm::vec3(
+                        (float) -20 + rand() % 41,
+                        (float) -20 + rand() % 41,
+                        0.0f
+                    ),
+                    &e45_model,
+                    E45
+                ));
             
             } else if (type_of_starship == 1 or type_of_starship == 3) {
-                model_attributes.push_back(
-                    {
-                        current_frame,
-                        current_frame + 1.0f,
-                        glm::vec3(
-                            (float) -20 + rand() % 41,
-                            (float) -20 + rand() % 41,
-                            0.0f
-                        ),
-                        glm::vec3(),
-                        &wraith_model,
-                        WRAITH
-                    });
+                model_attributes.push_back(StarShipAttributes(
+                    current_frame,
+                    current_frame + 1.0f,
+                    glm::vec3(
+                        (float) -20 + rand() % 41,
+                        (float) -20 + rand() % 41,
+                        0.0f
+                    ),
+                    &wraith_model,
+                    WRAITH
+                ));
             
             } else {
-                model_attributes.push_back(
-                    {
-                        current_frame,
-                        current_frame + 1.0f,
-                        glm::vec3(
-                            (float) -20 + rand() % 41,
-                            (float) -20 + rand() % 41,
-                            0.0f
-                        ),
-                        glm::vec3(),
-                        &vulcan_starship_model,
-                        VULCAN
-                    });
+                model_attributes.push_back(StarShipAttributes(
+                    current_frame,
+                    current_frame + 1.0f,
+                    glm::vec3(
+                        (float) -20 + rand() % 41,
+                        (float) -20 + rand() % 41,
+                        0.0f
+                    ),
+                    &vulcan_starship_model,
+                    VULCAN
+                ));
             }
 
             type_of_starship = (type_of_starship + 1) % 5;
@@ -1122,32 +1158,28 @@ int main(int argc, char** argv)
 
         if (current_frame - prev_asteroid_timestamp > 2.0f) {
             if (type_of_asteroid == 0) {
-                asteroid_attributes.push_back(
-                    {
-                        current_frame,
-                        glm::vec3(
-                            (float) -20 + rand() % 41,
-                            (float) -20 + rand() % 41,
-                            0.0f
-                        ),
-                        glm::vec3(),
-                        &asteroid_model,
-                        ASTEROID1
-                    });
+                asteroid_attributes.push_back(ModelAttributes(
+                    current_frame,
+                    glm::vec3(
+                        (float) -20 + rand() % 41,
+                        (float) -20 + rand() % 41,
+                        0.0f
+                    ),
+                    &asteroid_model,
+                    ASTEROID1
+                ));
             
             } else {
-                asteroid_attributes.push_back(
-                    {
-                        current_frame,
-                        glm::vec3(
-                            (float) -20 + rand() % 41,
-                            (float) -20 + rand() % 41,
-                            0.0f
-                        ),
-                        glm::vec3(),
-                        &asteroid_model2,
-                        ASTEROID2
-                    });
+                asteroid_attributes.push_back(ModelAttributes(
+                    current_frame,
+                    glm::vec3(
+                        (float) -20 + rand() % 41,
+                        (float) -20 + rand() % 41,
+                        0.0f
+                    ),
+                    &asteroid_model2,
+                    ASTEROID2
+                ));
             }
 
             type_of_asteroid = (type_of_asteroid + 1) % 2;
@@ -1156,21 +1188,18 @@ int main(int argc, char** argv)
         }
 
         if (current_frame - prev_dust_timestamp > 0.1f) {
-            dust_attributes.push_back(
-                {
-                    current_frame,
-                    glm::vec3(
-                        (float) -20 + rand() % 41,
-                        (float) -20 + rand() % 41,
-                        0.0f
-                    ),
-                    glm::vec3(),
-                    &dust_model,
-                    DUST
-                });
+            dust_attributes.push_back(ModelAttributes(
+                current_frame,
+                glm::vec3(
+                    (float) -20 + rand() % 41,
+                    (float) -20 + rand() % 41,
+                    0.0f
+                ),
+                &dust_model,
+                DUST
+            ));
 
             prev_dust_timestamp = current_frame;
-        
         }
 
         clear_objects();
@@ -1191,18 +1220,25 @@ int main(int argc, char** argv)
         for (auto &it: model_attributes) {
             draw_model(it);
             if (it.real_coords.z < 0.0f and
-                    current_frame - it.last_shot_timestamp > 1.5f) {
+                    current_frame - it.last_shot_timestamp > 1.5f and
+                    not game_over) {
                 
-                enemy_plasm_ball_attributes.push_back(
-                    {
-                        current_frame,
-                        it.real_coords,
-                        glm::vec3(),
-                        &sphere_model,
-                        PLASM_BALL
-                    });
+                enemy_plasm_ball_attributes.push_back(ModelAttributes(
+                    current_frame,
+                    it.real_coords,
+                    &sphere_model,
+                    PLASM_BALL
+                ));
 
                 it.last_shot_timestamp = current_frame;
+            }
+
+            if (it.real_coords.z > 0.0f
+                    and not it.was_hit
+                    and not game_over) {
+                
+                health -= 10;
+                it.was_hit = true;
             }
         }
 
@@ -1212,6 +1248,14 @@ int main(int argc, char** argv)
 
         for (auto &it: enemy_plasm_ball_attributes) {
             draw_enemy_plasm_ball(sphere_model, it);
+
+            if (it.real_coords.z > 0.0f
+                    and not it.was_hit
+                    and not game_over) {
+                
+                health -= 5;
+                it.was_hit = true;
+            }
         }
 
         for (auto &it: dust_attributes) {
@@ -1220,6 +1264,14 @@ int main(int argc, char** argv)
 
         for (auto &it: asteroid_attributes) {
             draw_asteroid(it);
+
+            if (it.real_coords.z > 0.0f
+                    and not it.was_hit
+                    and not game_over) {
+                
+                health -= 10;
+                it.was_hit = true;
+            }
         }
 
         std::set<unsigned int> deleted_models_pos;
@@ -1235,16 +1287,22 @@ int main(int argc, char** argv)
                                   plasm_ball_attributes[j].real_coords) <=
                         DIST) {
 
+                    if (model_attributes[i].obj_type == VULCAN) {
+                        score += 15;
+                    
+                    } else {
+                        score += 10;
+                    }
+
                     deleted_models_pos.insert(i);
                     deleted_plasm_balls_pos.insert(j);
 
-                    explosion_attributes.push_back(
-                        {
-                            current_frame,
-                            model_attributes[i].real_coords,
-                            glm::vec3(),
-                            &sphere_model
-                        });
+                    explosion_attributes.push_back(ModelAttributes(
+                        current_frame,
+                        model_attributes[i].real_coords,
+                        &sphere_model,
+                        EXPLOSION
+                    ));
                 }
             }
         }
@@ -1260,16 +1318,17 @@ int main(int argc, char** argv)
                                   plasm_ball_attributes[j].real_coords) <=
                         dist) {
 
+                    score += 5;
+
                     deleted_asteroids_pos.insert(i);
                     deleted_plasm_balls_pos.insert(j);
 
-                    explosion_attributes.push_back(
-                        {
-                            current_frame,
-                            asteroid_attributes[i].real_coords,
-                            glm::vec3(),
-                            &sphere_model
-                        });
+                    explosion_attributes.push_back(ModelAttributes(
+                        current_frame,
+                        asteroid_attributes[i].real_coords,
+                        &sphere_model,
+                        EXPLOSION
+                    ));
 
                     asteroid_fragment_attributes.push_back(
                         {
@@ -1340,21 +1399,80 @@ int main(int argc, char** argv)
 
         draw_skybox();
 
+        if (health <= 0 and not game_over) {
+            health = 0;
+            game_over = true;
+            game_over_timestamp = current_frame;
+        }
+
+        if (game_over) {
+            RenderText(text_program,
+                       "Your soul has been taken by the Space",
+                       369.0f,
+                       505.0f,
+                       0.5f,
+                       glm::vec3(1.0f, 1.0f, 1.0f));
+
+            RenderText(text_program,
+                       "And you will know My name is the Lord",
+                       439.0f,
+                       415.0f,
+                       0.425f,
+                       glm::vec3(1.0f, 1.0f, 1.0f));
+
+            RenderText(text_program,
+                       "    when I lay My vengeance upon thee",
+                       442.0f,
+                       392.0f,
+                       0.425f,
+                       glm::vec3(1.0f, 1.0f, 1.0f));
+
+            RenderText(text_program,
+                       "                  OT: Ezekiel, XV, 17",
+                       514.0f,
+                       369.0f,
+                       0.425f,
+                       glm::vec3(1.0f, 1.0f, 1.0f));
+
+            RenderText(text_program,
+                       std::string("Exit in ") +
+                       std::to_string(OUTRO_TIMEOUT -
+                           ((int) (current_frame - game_over_timestamp))),
+                       506.0f,
+                       279.0f,
+                       0.665f,
+                       glm::vec3(1.0f, 1.0f, 1.0f));
+
+            if (current_frame - game_over_timestamp > OUTRO_TIMEOUT) {
+                glfwSetWindowShouldClose(window, true);
+            } 
+        
+        } else {
+            RenderText(text_program,
+                       "+",
+                       /*545.0f,
+                       400.0f,*/
+                       555.0f,
+                       415.0f,
+                       0.5f,
+                       glm::vec3(1.0f, 1.0f, 1.0f));
+        }
+
         RenderText(text_program,
-                   "+",
-                   /*545.0f,
-                   400.0f,*/
-                   555.0f,
-                   415.0f,
+                   std::string("Total score: ") +
+                   std::to_string(score),
+                   3.0f,
+                   32,
                    0.5f,
                    glm::vec3(1.0f, 1.0f, 1.0f));
 
-        /*RenderText(text_program,
-                   std::to_string(coeff),
-                   0.0f,
-                   0.0f,
+        RenderText(text_program,
+                   std::string("Health: ") +
+                   std::to_string(health),
+                   3.0f,
+                   3.0f,
                    0.5f,
-                   glm::vec3(1.0f, 1.0f, 1.0f));*/
+                   glm::vec3(1.0f, 1.0f, 1.0f));
 
         glfwSwapBuffers(window);
         glfwPollEvents();
@@ -1368,9 +1486,9 @@ int main(int argc, char** argv)
     glDeleteVertexArrays(1, &VAO);
     glDeleteBuffers(1, &VBO);
 
-    /*std::cout << "iks = " << iks << std::endl;
+    std::cout << "iks = " << iks << std::endl;
     std::cout << "igrec = " << igrec << std::endl;
-    std::cout << "DIST = " << DIST << std::endl;*/
+    std::cout << "font_size = " << font_size << std::endl;
 
     glfwTerminate();
     return 0;
