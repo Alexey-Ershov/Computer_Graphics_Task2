@@ -126,6 +126,8 @@ float current_frame = 0.0f;
 int score = 0;
 int health = 100;
 bool game_over = false;
+float key_a_timestamp = 0.0f;
+float key_d_timestamp = 0.0f;
 
 ShaderProgram program;
 ShaderProgram model_program;
@@ -167,13 +169,25 @@ void processInput(GLFWwindow *window)
     if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
         // camera.ProcessKeyboard(LEFT, deltaTime);
         // coeff--;
-        iks -= 1.0f;
+        // iks -= 1.0f;
+        if ((current_frame - key_a_timestamp) > 0.15f and
+                camera.Position.x >= 0) {
+            
+            camera.Position.x -= 15.0f;
+            key_a_timestamp = current_frame;
+        }
     }
 
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
         // camera.ProcessKeyboard(RIGHT, deltaTime);
         // coeff++;
-        iks += 1.0f;
+        // iks += 1.0f;
+        if ((current_frame - key_d_timestamp) > 0.15f
+                and camera.Position.x <= 0) {
+            
+            camera.Position.x += 15.0f;
+            key_d_timestamp = current_frame;
+        }
     }
 
     if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) {
@@ -486,7 +500,7 @@ void draw_asteroid_fragment(Model &model, AsteroidFragmentAttributes &attrs)
 void draw_plasm_ball(Model &model, ModelAttributes &attrs)
 {
     attrs.real_coords = glm::vec3(
-            200 * attrs.coords.x *
+            camera.Position.x + 200 * attrs.coords.x *
                 (current_frame - attrs.appearance_timestamp),
             200 * attrs.coords.y *
                 (current_frame - attrs.appearance_timestamp),
@@ -521,7 +535,7 @@ void draw_enemy_plasm_ball(Model &model, ModelAttributes &attrs)
                 (current_frame - attrs.appearance_timestamp),*/
             /*-150 * attrs.coords.z / abs(attrs.coords.z) *
                 (current_frame - attrs.appearance_timestamp)*/
-            attrs.coords.x - 2 * attrs.coords.x *
+            attrs.coords.x - 2 * (attrs.coords.x - camera.Position.x) *
                 (current_frame - attrs.appearance_timestamp),
 
             attrs.coords.y - 2 * attrs.coords.y *
@@ -1217,71 +1231,53 @@ int main(int argc, char** argv)
 
         draw_model(wraith_model, it);*/
 
-        for (auto &it: model_attributes) {
-            draw_model(it);
-            if (it.real_coords.z < 0.0f and
-                    current_frame - it.last_shot_timestamp > 1.5f and
+        std::set<unsigned int> deleted_models_pos;
+        std::set<unsigned int> deleted_asteroids_pos;
+        std::set<unsigned int> deleted_plasm_balls_pos;
+
+        for (unsigned int i = 0; i < model_attributes.size(); i++) {
+            draw_model(model_attributes[i]);
+            if (model_attributes[i].real_coords.z < 0.0f and
+                    current_frame -
+                    model_attributes[i].last_shot_timestamp > 1.5f and
                     not game_over) {
                 
                 enemy_plasm_ball_attributes.push_back(ModelAttributes(
                     current_frame,
-                    it.real_coords,
+                    model_attributes[i].real_coords,
                     &sphere_model,
                     PLASM_BALL
                 ));
 
-                it.last_shot_timestamp = current_frame;
+                model_attributes[i].last_shot_timestamp = current_frame;
             }
 
-            if (it.real_coords.z > 0.0f
-                    and not it.was_hit
+            if (model_attributes[i].real_coords.z > 0.0f
+                    and not model_attributes[i].was_hit
                     and not game_over) {
                 
-                health -= 10;
-                it.was_hit = true;
+                model_attributes[i].was_hit = true;
+
+                if ((camera.Position.x >= 0 and
+                        model_attributes[i].real_coords.x >= 0 ) or
+                        (camera.Position.x <= 0 and 
+                        model_attributes[i].real_coords.x <= 0 )) {
+                    
+                    health -= 10;
+                    deleted_models_pos.insert(i);
+                    explosion_attributes.push_back(ModelAttributes(
+                        current_frame,
+                        glm::vec3(
+                            model_attributes[i].real_coords.x,
+                            model_attributes[i].real_coords.y,
+                            model_attributes[i].real_coords.z - 6.0f
+                        ),
+                        &sphere_model,
+                        EXPLOSION
+                    ));
+                }
             }
-        }
 
-        for (auto &it: plasm_ball_attributes) {
-            draw_plasm_ball(sphere_model, it);
-        }
-
-        for (auto &it: enemy_plasm_ball_attributes) {
-            draw_enemy_plasm_ball(sphere_model, it);
-
-            if (it.real_coords.z > 0.0f
-                    and not it.was_hit
-                    and not game_over) {
-                
-                health -= 5;
-                it.was_hit = true;
-            }
-        }
-
-        for (auto &it: dust_attributes) {
-            draw_dust(dust_model, it);
-        }
-
-        for (auto &it: asteroid_attributes) {
-            draw_asteroid(it);
-
-            if (it.real_coords.z > 0.0f
-                    and not it.was_hit
-                    and not game_over) {
-                
-                health -= 10;
-                it.was_hit = true;
-            }
-        }
-
-        std::set<unsigned int> deleted_models_pos;
-        std::set<unsigned int> deleted_asteroids_pos;
-        std::set<unsigned int> deleted_plasm_balls_pos;
-        auto model_attributes_begin = model_attributes.begin();
-        auto asteroid_attributes_begin = asteroid_attributes.begin();
-        auto plasm_ball_attributes_begin = plasm_ball_attributes.begin();
-
-        for (unsigned int i = 0; i < model_attributes.size(); i++) {
             for (unsigned int j = 0; j < plasm_ball_attributes.size(); j++) {
                 if (glm::distance(model_attributes[i].real_coords,
                                   plasm_ball_attributes[j].real_coords) <=
@@ -1308,6 +1304,69 @@ int main(int argc, char** argv)
         }
 
         for (unsigned int i = 0; i < asteroid_attributes.size(); i++) {
+            draw_asteroid(asteroid_attributes[i]);
+
+            if (asteroid_attributes[i].real_coords.z > 0.0f
+                    and not asteroid_attributes[i].was_hit
+                    and not game_over) {
+                
+                asteroid_attributes[i].was_hit = true;
+
+                if ((camera.Position.x >= 0 and
+                        asteroid_attributes[i].real_coords.x >= 0 ) or
+                        (camera.Position.x <= 0 and
+                        asteroid_attributes[i].real_coords.x <= 0 )) {
+                        
+                        health -= 10;
+                        deleted_asteroids_pos.insert(i);
+                        explosion_attributes.push_back(ModelAttributes(
+                            current_frame,
+                            glm::vec3(
+                                asteroid_attributes[i].real_coords.x,
+                                asteroid_attributes[i].real_coords.y,
+                                asteroid_attributes[i].real_coords.z - 6.0f
+                            ),
+                            &sphere_model,
+                            EXPLOSION
+                        ));
+
+                        asteroid_fragment_attributes.push_back(
+                            {
+                                current_frame,
+                                asteroid_attributes[i].real_coords,
+                                glm::vec3(1.0f, 0.0f, 0.0f)
+                            });
+
+                        asteroid_fragment_attributes.push_back(
+                            {
+                                current_frame,
+                                asteroid_attributes[i].real_coords,
+                                glm::vec3(-1.0f, 0.0f, 0.0f)
+                            });
+
+                        asteroid_fragment_attributes.push_back(
+                            {
+                                current_frame,
+                                asteroid_attributes[i].real_coords,
+                                glm::vec3(0.0f, 1.0f, 0.0f)
+                            });
+
+                        asteroid_fragment_attributes.push_back(
+                            {
+                                current_frame,
+                                asteroid_attributes[i].real_coords,
+                                glm::vec3(0.0f, -1.0f, 0.0f)
+                            });
+
+                        asteroid_fragment_attributes.push_back(
+                            {
+                                current_frame,
+                                asteroid_attributes[i].real_coords,
+                                glm::vec3(0.0f, 0.0f, -1.0f)
+                            });
+                }
+            }
+
             for (unsigned int j = 0; j < plasm_ball_attributes.size(); j++) {
                 float dist = DIST;
                 if (asteroid_attributes[i].obj_type == ASTEROID2) {
@@ -1368,6 +1427,30 @@ int main(int argc, char** argv)
             }
         }
 
+        for (auto &it: plasm_ball_attributes) {
+            draw_plasm_ball(sphere_model, it);
+        }
+
+        for (auto &it: enemy_plasm_ball_attributes) {
+            draw_enemy_plasm_ball(sphere_model, it);
+
+            if (it.real_coords.z > 0.0f
+                    and not it.was_hit
+                    and not game_over) {
+                
+                health -= 5;
+                it.was_hit = true;
+            }
+        }
+
+        for (auto &it: dust_attributes) {
+            draw_dust(dust_model, it);
+        }
+
+        auto model_attributes_begin = model_attributes.begin();
+        auto asteroid_attributes_begin = asteroid_attributes.begin();
+        auto plasm_ball_attributes_begin = plasm_ball_attributes.begin();
+
         for (auto it = deleted_models_pos.rbegin();
                 it != deleted_models_pos.rend(); ++it) {
 
@@ -1399,11 +1482,11 @@ int main(int argc, char** argv)
 
         draw_skybox();
 
-        if (health <= 0 and not game_over) {
+        /*if (health <= 0 and not game_over) {
             health = 0;
             game_over = true;
             game_over_timestamp = current_frame;
-        }
+        }*/
 
         if (game_over) {
             RenderText(text_program,
