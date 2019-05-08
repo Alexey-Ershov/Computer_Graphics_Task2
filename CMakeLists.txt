@@ -18,10 +18,18 @@ set(ADDITIONAL_INCLUDE_DIRS
         dependencies/include/SOIL
         dependencies/include/freetype/include
         dependencies/include)
+
 set(ADDITIONAL_LIBRARY_DIRS
         dependencies/lib)   
+
 set(ADDITIONAL_RUNTIME_LIBRARY_DIRS
-        dependencies/bin)   
+        dependencies/bin)
+
+set(IRRKLANG_HOME "${CMAKE_CURRENT_SOURCE_DIR}/irrKlang-64bit-1.6.0")
+set(IRRKLANG_INCLUDE_DIR "${IRRKLANG_HOME}/include")
+set(IRRKLANG_LIBRARIES "${IRRKLANG_HOME}/lib/Winx64-visualStudio/irrKlang.lib")
+
+include_directories(${IRRKLANG_INCLUDE_DIR})
 
 set (CMAKE_CXX_FLAGS_DEBUG  "${CMAKE_CXX_FLAGS_DEBUG}")
 
@@ -66,4 +74,7 @@ else()
   target_link_libraries(main LINK_PUBLIC ${OPENGL_gl_LIBRARY} glfw rt dl SOIL)
   target_link_libraries(main LINK_PUBLIC ${ASSIMP_LIBRARIES})
   target_link_libraries(main LINK_PUBLIC ${FREETYPE_LIBRARIES})
+  target_link_libraries(main LINK_PUBLIC ${IRRKLANG_LIBRARIES})
+  target_link_libraries(main LINK_PUBLIC "${IRRKLANG_HOME}/bin/linux-gcc-64/libIrrKlang.so")
+
 endif()

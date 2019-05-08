@@ -4,3 +4,5 @@ container.jpg
 resources/textures/scope.png
 dependencies/include/freetype
 font.*
+irrKlang-64bit-1.6.0
+resources/sounds

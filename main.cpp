@@ -13,6 +13,7 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <ft2build.h>
 #include FT_FREETYPE_H
+#include <irrKlang.h>
 
 #include <random>
 #include <string>
@@ -23,6 +24,10 @@
 #include <ctime>
 #include <cmath>
 
+
+using namespace irrklang;
+
+#pragma comment(lib, "irrKlang.lib")
 
 #define DIST 2.5f
 #define OUTRO_TIMEOUT 10
@@ -139,6 +144,7 @@ unsigned int cubemapTexture;
 unsigned int skyboxVAO;
 GLuint scope_texture;
 Model sphere_model;
+ISoundEngine *sound_engine;
 std::vector<StarShipAttributes> model_attributes;
 std::vector<ModelAttributes> plasm_ball_attributes;
 std::vector<ModelAttributes> enemy_plasm_ball_attributes;
@@ -253,6 +259,9 @@ void mouse_button_callback(GLFWwindow* window,
             &sphere_model,
             PLASM_BALL
         ));
+
+        sound_engine->play2D("../resources/sounds/collision.mp3",
+                             false);
     
     } else if(button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
         /*model_attributes.push_back(
@@ -828,6 +837,14 @@ int main(int argc, char** argv)
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
+    sound_engine = createIrrKlangDevice();
+    if (!sound_engine) {
+        std::cerr << "irrKlang: Error starting up the sound engine";
+    
+    } else {
+        sound_engine->play2D("../resources/sounds/background_music.mp3", true);
+    }
+
 	/*//создание шейдерной программы из двух файлов с исходниками шейдеров
 	//используется класс-обертка ShaderProgram
 	std::unordered_map<GLenum, std::string> shaders;
@@ -1264,6 +1281,7 @@ int main(int argc, char** argv)
                         model_attributes[i].real_coords.x <= 0 )) {
                     
                     health -= 10;
+
                     deleted_models_pos.insert(i);
                     explosion_attributes.push_back(ModelAttributes(
                         current_frame,
@@ -1275,6 +1293,9 @@ int main(int argc, char** argv)
                         &sphere_model,
                         EXPLOSION
                     ));
+
+                    sound_engine->play2D("../resources/sounds/explosion.wav",
+                                         false);
                 }
             }
 
@@ -1299,6 +1320,9 @@ int main(int argc, char** argv)
                         &sphere_model,
                         EXPLOSION
                     ));
+
+                    sound_engine->play2D("../resources/sounds/explosion.wav",
+                                         false);
                 }
             }
         }
@@ -1318,6 +1342,7 @@ int main(int argc, char** argv)
                         asteroid_attributes[i].real_coords.x <= 0 )) {
                         
                         health -= 10;
+                        
                         deleted_asteroids_pos.insert(i);
                         explosion_attributes.push_back(ModelAttributes(
                             current_frame,
@@ -1364,6 +1389,10 @@ int main(int argc, char** argv)
                                 asteroid_attributes[i].real_coords,
                                 glm::vec3(0.0f, 0.0f, -1.0f)
                             });
+
+                        sound_engine->play2D(
+                                "../resources/sounds/explosion.wav",
+                                false);
                 }
             }
 
@@ -1423,6 +1452,9 @@ int main(int argc, char** argv)
                             asteroid_attributes[i].real_coords,
                             glm::vec3(0.0f, 0.0f, -1.0f)
                         });
+
+                    sound_engine->play2D("../resources/sounds/explosion.wav",
+                                         false);
                 }
             }
         }
@@ -1440,7 +1472,10 @@ int main(int argc, char** argv)
                 
                 health -= 5;
                 it.was_hit = true;
+                sound_engine->play2D("../resources/sounds/shot_sound.mp3",
+                                     false);
             }
+
         }
 
         for (auto &it: dust_attributes) {
@@ -1482,11 +1517,14 @@ int main(int argc, char** argv)
 
         draw_skybox();
 
-        /*if (health <= 0 and not game_over) {
+        if (health <= 0 and not game_over) {
             health = 0;
             game_over = true;
             game_over_timestamp = current_frame;
-        }*/
+
+            sound_engine->play2D("../resources/sounds/large_explosion.mp3",
+                                 false);
+        }
 
         if (game_over) {
             RenderText(text_program,
