@@ -1,10 +1,8 @@
-//internal includes
 #include "common.h"
 #include "ShaderProgram.h"
 #include "camera.h"
 #include "model.h"
 
-//External dependencies
 #define GLFW_DLL
 #include <GLFW/glfw3.h>
 #include <SOIL.h>
@@ -31,11 +29,10 @@ using namespace irrklang;
 
 #define DIST 2.5f
 #define OUTRO_TIMEOUT 10
+#define STANDART_TEXT_WIDTH 1120
 
-float iks = 555.0f;
-float igrec = 415.0f;
-float font_size = 0.5f;
-int coeff = 200;
+static const GLsizei WIDTH = 640;
+static const GLsizei HEIGHT = 480;
 
 enum ObjTypes
 {
@@ -56,7 +53,6 @@ struct ModelAttributes
     Model *model;
     ObjTypes obj_type;
     glm::vec3 real_coords;
-    bool was_hit;
 
     ModelAttributes(float ap_ts,
                     glm::vec3 c,
@@ -65,8 +61,7 @@ struct ModelAttributes
                                    coords {c},
                                    model {m},
                                    obj_type {ot},
-                                   real_coords {glm::vec3()},
-                                   was_hit {false}
+                                   real_coords {glm::vec3()}
                                    {};
 };
 
@@ -85,7 +80,6 @@ struct StarShipAttributes
     Model *model;
     ObjTypes obj_type;
     glm::vec3 real_coords;
-    bool was_hit;
 
     StarShipAttributes(float ap_ts,
                        float lst,
@@ -96,34 +90,28 @@ struct StarShipAttributes
                                       coords {c},
                                       model {m},
                                       obj_type {ot},
-                                      real_coords {glm::vec3()},
-                                      was_hit {false}
+                                      real_coords {glm::vec3()}
                                       {};
 };
 
-/// Holds all state information relevant to a character as loaded using FreeType
 struct Character
 {
-    GLuint TextureID;   // ID handle of the glyph texture
-    glm::ivec2 Size;    // Size of glyph
-    glm::ivec2 Bearing;  // Offset from baseline to left/top of glyph
-    GLuint Advance;    // Horizontal offset to advance to next glyph
+    GLuint TextureID;
+    glm::ivec2 Size;
+    glm::ivec2 Bearing;
+    GLuint Advance;
 };
 
+// Utility variables.
 std::map<GLchar, Character> Characters;
 GLuint VAO;
 GLuint VBO;
 
-static const GLsizei WIDTH = 1120;
-static const GLsizei HEIGHT = 840;
-
-// Camera.
 Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
 float lastX = (float) WIDTH / 2.0;
 float lastY = (float) HEIGHT / 2.0;
 bool firstMouse = true;
 
-// timing
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
 
@@ -133,6 +121,8 @@ int health = 100;
 bool game_over = false;
 float key_a_timestamp = 0.0f;
 float key_d_timestamp = 0.0f;
+std::string large_explosion = "../resources/sounds/large_explosion.mp3";
+std::string game_name = "SMIERTIELNAJA BITWA";
 
 ShaderProgram program;
 ShaderProgram model_program;
@@ -140,12 +130,14 @@ ShaderProgram skybox_program;
 ShaderProgram text_program;
 ShaderProgram plasm_ball_program;
 ShaderProgram explosion_program;
+
 unsigned int cubemapTexture;
 unsigned int skyboxVAO;
 GLuint scope_texture;
 Model sphere_model;
 ISoundEngine *sound_engine;
-std::vector<StarShipAttributes> model_attributes;
+
+std::vector<StarShipAttributes> starship_attributes;
 std::vector<ModelAttributes> plasm_ball_attributes;
 std::vector<ModelAttributes> enemy_plasm_ball_attributes;
 std::vector<ModelAttributes> explosion_attributes;
@@ -169,7 +161,9 @@ void play_sound(std::string path, bool is_bg)
                                                      true);
         
         if (snd) {
-            snd->setVolume(0.6);
+            if (path != large_explosion) {
+                snd->setVolume(0.6);
+            }
             snd->setIsPaused(false);
             snd->drop();
             snd = NULL;
@@ -183,20 +177,7 @@ void processInput(GLFWwindow *window)
         glfwSetWindowShouldClose(window, true);
     }
 
-    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
-        // camera.ProcessKeyboard(FORWARD, deltaTime);
-        igrec += 1.0f;
-    }
-
-    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
-        // camera.ProcessKeyboard(BACKWARD, deltaTime);
-        igrec -= 1.0f;
-    }
-
     if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
-        // camera.ProcessKeyboard(LEFT, deltaTime);
-        // coeff--;
-        // iks -= 1.0f;
         if ((current_frame - key_a_timestamp) > 0.15f and
                 camera.Position.x >= 0) {
             
@@ -206,9 +187,6 @@ void processInput(GLFWwindow *window)
     }
 
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
-        // camera.ProcessKeyboard(RIGHT, deltaTime);
-        // coeff++;
-        // iks += 1.0f;
         if ((current_frame - key_d_timestamp) > 0.15f
                 and camera.Position.x <= 0) {
             
@@ -216,27 +194,13 @@ void processInput(GLFWwindow *window)
             key_d_timestamp = current_frame;
         }
     }
-
-    if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) {
-        font_size -= 0.005f;
-    }
-
-    if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) {
-        font_size += 0.005f;
-    }
 }
 
-// glfw: whenever the window size changed (by OS or user resize) this callback function executes
-// ---------------------------------------------------------------------------------------------
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
-    // make sure the viewport matches the new window dimensions; note that width and 
-    // height will be significantly larger than specified on retina displays.
     glViewport(0, 0, width, height);
 }
 
-// glfw: whenever the mouse moves, this callback is called
-// -------------------------------------------------------
 void mouse_callback(GLFWwindow* window, double xpos, double ypos)
 {
     if (firstMouse)
@@ -247,7 +211,7 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos)
     }
 
     float xoffset = xpos - lastX;
-    float yoffset = lastY - ypos; // reversed since y-coordinates go from bottom to top
+    float yoffset = lastY - ypos;
 
     lastX = xpos;
     lastY = ypos;
@@ -264,12 +228,6 @@ void mouse_button_callback(GLFWwindow* window,
             action == GLFW_PRESS and
             not game_over) {
         
-        /*std::cout << "+++++++++++++++++++" << std::endl;
-        std::cout << "xpos = " << camera.Front.x << std::endl;
-        std::cout << "ypos = " << camera.Front.y << std::endl;
-        std::cout << "zpos = " << camera.Front.z << std::endl;
-        std::cout << "-------------------" << std::endl << std::endl;*/
-
         plasm_ball_attributes.push_back(ModelAttributes(
             current_frame,
             glm::vec3(
@@ -281,43 +239,10 @@ void mouse_button_callback(GLFWwindow* window,
             PLASM_BALL
         ));
 
-        play_sound("../resources/sounds/collision.mp3",
+        play_sound("../resources/sounds/shot_sound.mp3",
                    false);
     
-    } else if(button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
-        /*model_attributes.push_back(
-                    {
-                        current_frame,
-                        glm::vec3(
-                            -5.0f,
-                            -5.0f,
-                             0.0f
-                        )
-                    });
-
-        model_attributes.push_back(
-                    {
-                        current_frame,
-                        glm::vec3(
-                             5.0f,
-                            -5.0f,
-                             0.0f
-                        )
-                    });*/
-
-        /*explosion_attributes.push_back(
-            {
-                current_frame,
-                glm::vec3(1.0f, 1.0f, -2.5f)
-            });*/
     }
-}
-
-// glfw: whenever the mouse scroll wheel scrolls, this callback is called
-// ----------------------------------------------------------------------
-void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
-{
-    camera.ProcessMouseScroll(yoffset);
 }
 
 unsigned int loadCubemap(std::vector<std::string> faces)
@@ -326,15 +251,17 @@ unsigned int loadCubemap(std::vector<std::string> faces)
     glGenTextures(1, &textureID);
     glBindTexture(GL_TEXTURE_CUBE_MAP, textureID);
 
-    int width, height, nrChannels;
+    int width;
+    int height;
+    int nrChannels;
+    
     for (unsigned int i = 0; i < faces.size(); i++) {
         unsigned char *data = SOIL_load_image(faces[i].c_str(),
                                               &width,
                                               &height,
                                               &nrChannels,
                                               0);
-        if (data)
-        {
+        if (data) {
             glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,
                          0,
                          GL_RGB,
@@ -363,32 +290,49 @@ unsigned int loadCubemap(std::vector<std::string> faces)
     return textureID;
 }
 
-// utility function for loading a 2D texture from file
-// ---------------------------------------------------
 unsigned int loadTexture(char const *path)
 {
     unsigned int textureID;
     glGenTextures(1, &textureID);
 
-    int width, height, nrComponents;
-    unsigned char *data = SOIL_load_image(path, &width, &height, &nrComponents, 0);
-    if (data)
-    {
+    int width;
+    int height;
+    int nrComponents;
+
+    unsigned char *data = SOIL_load_image(path,
+                                          &width,
+                                          &height,
+                                          &nrComponents,
+                                          0);
+    if (data) {
         GLenum format;
-        if (nrComponents == 1)
+        
+        if (nrComponents == 1){
             format = GL_RED;
-        else if (nrComponents == 3)
+        
+        } else if (nrComponents == 3){
             format = GL_RGB;
-        else if (nrComponents == 4)
+        } else if (nrComponents == 4) {
             format = GL_RGBA;
+        }
 
         glBindTexture(GL_TEXTURE_2D, textureID);
-        glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+        glTexImage2D(GL_TEXTURE_2D,
+                     0,
+                     format,
+                     width,
+                     height,
+                     0,
+                     format,
+                     GL_UNSIGNED_BYTE,
+                     data);
         glGenerateMipmap(GL_TEXTURE_2D);
 
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D,
+                        GL_TEXTURE_MIN_FILTER,
+                        GL_LINEAR_MIPMAP_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
         SOIL_free_image_data(data);
@@ -401,46 +345,45 @@ unsigned int loadTexture(char const *path)
     return textureID;
 }
 
-void draw_model(StarShipAttributes &attrs)
+void draw_starship(StarShipAttributes &attrs)
 {
     attrs.real_coords = glm::vec3(
             attrs.coords.x,
             attrs.coords.y,
             -100.0f + 20 * (current_frame - attrs.appearance_timestamp));
 
-    /*attrs.real_coords = glm::vec3(
-            attrs.coords.x,
-            attrs.coords.y,
-            attrs.coords.z);*/
-
     model_program.StartUseShader();
-    // view/projection transformations
-    glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float) WIDTH / (float) HEIGHT, 0.1f, 100.0f);
+    
+    glm::mat4 projection = glm::perspective(
+            glm::radians(camera.Zoom),
+            (float) WIDTH / (float) HEIGHT, 0.1f, 100.0f);
+    
     glm::mat4 view = camera.GetViewMatrix();
+    
     model_program.SetUniform("view", view);
     model_program.SetUniform("projection", projection);
 
-    glm::mat4 starship_model = glm::mat4(1.0f);
-    starship_model = glm::translate(starship_model, attrs.real_coords);
+    glm::mat4 model_matrix = glm::mat4(1.0f);
+    model_matrix = glm::translate(model_matrix, attrs.real_coords);
 
     if (attrs.obj_type != WRAITH) {
-        starship_model = glm::rotate(starship_model,
-                                     3.14f,
-                                     glm::vec3(0.0f, 1.0f, 0.0f));
+        model_matrix = glm::rotate(model_matrix,
+                                   (float) M_PI,
+                                   glm::vec3(0.0f, 1.0f, 0.0f));
 
         if (attrs.obj_type == VULCAN) {
-            starship_model = glm::scale(starship_model, glm::vec3(2.0f,
-                                                                  2.0f,
-                                                                  2.0f));
+            model_matrix = glm::scale(model_matrix, glm::vec3(2.0f,
+                                                              2.0f,
+                                                              2.0f));
         }
     
     } else {
-        starship_model = glm::scale(starship_model, glm::vec3(0.01f,
-                                                              0.01f,
-                                                              0.01f));
+        model_matrix = glm::scale(model_matrix, glm::vec3(0.01f,
+                                                          0.01f,
+                                                          0.01f));
     }
 
-    model_program.SetUniform("model", starship_model);
+    model_program.SetUniform("model", model_matrix);
     attrs.model->Draw(model_program);
 }
 
@@ -451,44 +394,40 @@ void draw_asteroid(ModelAttributes &attrs)
             attrs.coords.y,
             -110.0f + 30 * (current_frame - attrs.appearance_timestamp));
 
-    /*attrs.real_coords = glm::vec3(
-            attrs.coords.x,
-            attrs.coords.y,
-            attrs.coords.z);*/
-
-    /*attrs.real_coords = glm::vec3(1.0f, 1.0f, -5.0f);*/
-
     model_program.StartUseShader();
-    // view/projection transformations
-    glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float) WIDTH / (float) HEIGHT, 0.1f, 100.0f);
+    
+    glm::mat4 projection = glm::perspective(
+            glm::radians(camera.Zoom),
+            (float) WIDTH / (float) HEIGHT, 0.1f, 100.0f);
+    
     glm::mat4 view = camera.GetViewMatrix();
+    
     model_program.SetUniform("view", view);
     model_program.SetUniform("projection", projection);
 
-    // First starship.
-    glm::mat4 starship_model = glm::mat4(1.0f);
-    starship_model = glm::translate(starship_model, attrs.real_coords);
+    glm::mat4 model_matrix = glm::mat4(1.0f);
+    model_matrix = glm::translate(model_matrix, attrs.real_coords);
 
     if (attrs.obj_type == ASTEROID1) {
-        starship_model = glm::rotate(starship_model,
+        model_matrix = glm::rotate(model_matrix,
                 (current_frame - attrs.appearance_timestamp),
                 glm::vec3(0.0f, 1.0f, 0.0f));
 
-        starship_model = glm::scale(starship_model, glm::vec3(2.0f,
-                                                              2.0f,
-                                                              2.0f));
+        model_matrix = glm::scale(model_matrix, glm::vec3(2.0f,
+                                                          2.0f,
+                                                          2.0f));
 
     } else {
-        starship_model = glm::rotate(starship_model,
+        model_matrix = glm::rotate(model_matrix,
                 4 *(current_frame - attrs.appearance_timestamp),
                 glm::vec3(1.0f, 1.0f, 0.0f));
     
-        starship_model = glm::scale(starship_model, glm::vec3(0.05f,
-                                                              0.05f,
-                                                              0.05f));
+        model_matrix = glm::scale(model_matrix, glm::vec3(0.05f,
+                                                          0.05f,
+                                                          0.05f));
     }
 
-    model_program.SetUniform("model", starship_model);
+    model_program.SetUniform("model", model_matrix);
     attrs.model->Draw(model_program);
 }
 
@@ -502,28 +441,29 @@ void draw_asteroid_fragment(Model &model, AsteroidFragmentAttributes &attrs)
             attrs.coords.z + 100 * attrs.direction.z *
                     (current_frame - attrs.appearance_timestamp));
 
-    /*attrs.real_coords = glm::vec3(1.0f, 1.0f, -5.0f);*/
-
     model_program.StartUseShader();
-    // view/projection transformations
-    glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float) WIDTH / (float) HEIGHT, 0.1f, 100.0f);
+
+    glm::mat4 projection = glm::perspective(
+            glm::radians(camera.Zoom),
+            (float) WIDTH / (float) HEIGHT, 0.1f, 100.0f);
+    
     glm::mat4 view = camera.GetViewMatrix();
+    
     model_program.SetUniform("view", view);
     model_program.SetUniform("projection", projection);
 
-    // First starship.
-    glm::mat4 starship_model = glm::mat4(1.0f);
-    starship_model = glm::translate(starship_model, real_coords);
+    glm::mat4 model_matrix = glm::mat4(1.0f);
+    model_matrix = glm::translate(model_matrix, real_coords);
 
-    starship_model = glm::rotate(starship_model,
+    model_matrix = glm::rotate(model_matrix,
             (current_frame - attrs.appearance_timestamp),
             glm::vec3(0.0f, 1.0f, 0.0f));
 
-    starship_model = glm::scale(starship_model, glm::vec3(0.025f,
-                                                          0.025f,
-                                                          0.025f));
+    model_matrix = glm::scale(model_matrix, glm::vec3(0.025f,
+                                                      0.025f,
+                                                      0.025f));
 
-    model_program.SetUniform("model", starship_model);
+    model_program.SetUniform("model", model_matrix);
     model.Draw(model_program);
 }
 
@@ -538,33 +478,30 @@ void draw_plasm_ball(Model &model, ModelAttributes &attrs)
                 (current_frame - attrs.appearance_timestamp));
 
     plasm_ball_program.StartUseShader();
-    // view/projection transformations
-    glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float) WIDTH / (float) HEIGHT, 0.1f, 100.0f);
+
+    glm::mat4 projection = glm::perspective(
+            glm::radians(camera.Zoom),
+            (float) WIDTH / (float) HEIGHT, 0.1f, 100.0f);
+
     glm::mat4 view = camera.GetViewMatrix();
+
     plasm_ball_program.SetUniform("view", view);
     plasm_ball_program.SetUniform("projection", projection);
 
-    // First starship.
-    glm::mat4 starship_model = glm::mat4(1.0f);
-    starship_model = glm::translate(starship_model, attrs.real_coords);
+    glm::mat4 model_matrix = glm::mat4(1.0f);
+    model_matrix = glm::translate(model_matrix, attrs.real_coords);
 
-    starship_model = glm::scale(starship_model, glm::vec3(0.005f,
-                                                          0.005f,
-                                                          0.005f));
+    model_matrix = glm::scale(model_matrix, glm::vec3(0.005f,
+                                                      0.005f,
+                                                      0.005f));
 
-    plasm_ball_program.SetUniform("model", starship_model);
+    plasm_ball_program.SetUniform("model", model_matrix);
     model.Draw(plasm_ball_program);
 }
 
 void draw_enemy_plasm_ball(Model &model, ModelAttributes &attrs)
 {
     attrs.real_coords = glm::vec3(
-            /*200 * attrs.coords.x *
-                (current_frame - attrs.appearance_timestamp),
-            200 * attrs.coords.y *
-                (current_frame - attrs.appearance_timestamp),*/
-            /*-150 * attrs.coords.z / abs(attrs.coords.z) *
-                (current_frame - attrs.appearance_timestamp)*/
             attrs.coords.x - 2 * (attrs.coords.x - camera.Position.x) *
                 (current_frame - attrs.appearance_timestamp),
 
@@ -575,44 +512,50 @@ void draw_enemy_plasm_ball(Model &model, ModelAttributes &attrs)
                 (current_frame - attrs.appearance_timestamp));
 
     plasm_ball_program.StartUseShader();
-    // view/projection transformations
-    glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float) WIDTH / (float) HEIGHT, 0.1f, 100.0f);
+
+    glm::mat4 projection = glm::perspective(
+            glm::radians(camera.Zoom),
+            (float) WIDTH / (float) HEIGHT, 0.1f, 100.0f);
+    
     glm::mat4 view = camera.GetViewMatrix();
+    
     plasm_ball_program.SetUniform("view", view);
     plasm_ball_program.SetUniform("projection", projection);
 
-    // First starship.
-    glm::mat4 starship_model = glm::mat4(1.0f);
-    starship_model = glm::translate(starship_model, attrs.real_coords);
+    glm::mat4 model_matrix = glm::mat4(1.0f);
+    model_matrix = glm::translate(model_matrix, attrs.real_coords);
 
-    starship_model = glm::scale(starship_model, glm::vec3(0.005f,
-                                                          0.005f,
-                                                          0.005f));
+    model_matrix = glm::scale(model_matrix, glm::vec3(0.005f,
+                                                      0.005f,
+                                                      0.005f));
 
-    plasm_ball_program.SetUniform("model", starship_model);
+    plasm_ball_program.SetUniform("model", model_matrix);
     model.Draw(plasm_ball_program);
 }
 
 void draw_exploison(Model &model, ModelAttributes &attrs)
 {
     explosion_program.StartUseShader();
-    // view/projection transformations
-    glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float) WIDTH / (float) HEIGHT, 0.1f, 100.0f);
+
+    glm::mat4 projection = glm::perspective(
+            glm::radians(camera.Zoom),
+            (float) WIDTH / (float) HEIGHT, 0.1f, 100.0f);
+    
     glm::mat4 view = camera.GetViewMatrix();
+    
     explosion_program.SetUniform("view", view);
     explosion_program.SetUniform("projection", projection);
 
-    // First starship.
-    glm::mat4 starship_model = glm::mat4(1.0f);
-    starship_model = glm::translate(starship_model, attrs.coords);
+    glm::mat4 model_matrix = glm::mat4(1.0f);
+    model_matrix = glm::translate(model_matrix, attrs.coords);
 
-    starship_model =
-            glm::scale(starship_model,
-glm::vec3(/*0.001f + */0.1f * (current_frame - attrs.appearance_timestamp),
-          /*0.001f + */0.1f * (current_frame - attrs.appearance_timestamp),
-          /*0.001f + */0.1f * (current_frame - attrs.appearance_timestamp)));
+    model_matrix =
+            glm::scale(model_matrix,
+            glm::vec3(0.1f * (current_frame - attrs.appearance_timestamp),
+                      0.1f * (current_frame - attrs.appearance_timestamp),
+                      0.1f * (current_frame - attrs.appearance_timestamp)));
 
-    explosion_program.SetUniform("model", starship_model);
+    explosion_program.SetUniform("model", model_matrix);
     model.Draw(explosion_program);
 }
 
@@ -624,51 +567,48 @@ void draw_dust(Model &model, ModelAttributes &attrs)
             -100.0f + 100 * (current_frame - attrs.appearance_timestamp));
 
     plasm_ball_program.StartUseShader();
-    // view/projection transformations
-    glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float) WIDTH / (float) HEIGHT, 0.1f, 100.0f);
+
+    glm::mat4 projection = glm::perspective(
+            glm::radians(camera.Zoom),
+            (float) WIDTH / (float) HEIGHT, 0.1f, 100.0f);
+
     glm::mat4 view = camera.GetViewMatrix();
+  
     plasm_ball_program.SetUniform("view", view);
     plasm_ball_program.SetUniform("projection", projection);
 
-    // First starship.
-    glm::mat4 starship_model = glm::mat4(1.0f);
-    starship_model = glm::translate(starship_model, attrs.real_coords);
+    glm::mat4 model_matrix = glm::mat4(1.0f);
+    model_matrix = glm::translate(model_matrix, attrs.real_coords);
 
-    starship_model = glm::scale(starship_model, glm::vec3(0.04f,
-                                                          0.04f,
-                                                          0.04f));
+    model_matrix = glm::scale(model_matrix, glm::vec3(0.04f,
+                                                      0.04f,
+                                                      0.04f));
 
-    plasm_ball_program.SetUniform("model", starship_model);
+    plasm_ball_program.SetUniform("model", model_matrix);
     model.Draw(plasm_ball_program);
 }
 
 void draw_skybox()
 {
-    glDepthFunc(GL_LEQUAL);  // change depth function so depth test passes when values are equal to depth buffer's content
+    glDepthFunc(GL_LEQUAL);
+
     skybox_program.StartUseShader();
-    glm::mat4 view = glm::mat4(glm::mat3(camera.GetViewMatrix())); // remove translation from the view matrix
-    glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float) WIDTH / (float) HEIGHT, 0.1f, 100.0f);
+    
+    glm::mat4 view = glm::mat4(glm::mat3(camera.GetViewMatrix()));
+    glm::mat4 projection = glm::perspective(
+            glm::radians(camera.Zoom),
+            (float) WIDTH / (float) HEIGHT, 0.1f, 100.0f);
+
     skybox_program.SetUniform("view", view);
     skybox_program.SetUniform("projection", projection);
-    // skybox cube
+
     glBindVertexArray(skyboxVAO);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
     glDrawArrays(GL_TRIANGLES, 0, 36);
     glBindVertexArray(0);
-    glDepthFunc(GL_LESS); // set depth function back to default
+    glDepthFunc(GL_LESS);
 }
-
-/*void draw_scope()
-{
-    glBindTexture(GL_TEXTURE_2D, scope_texture);
-
-    program.StartUseShader();
-
-    glBindVertexArray(VAO);
-    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-    glBindVertexArray(0);
-}*/
 
 void RenderText(ShaderProgram &program,
                 std::string text,
@@ -677,10 +617,12 @@ void RenderText(ShaderProgram &program,
                 GLfloat scale,
                 glm::vec3 color)
 {
-    // Activate corresponding render state  
+    x /= (float) STANDART_TEXT_WIDTH / WIDTH;
+    y /= (float) STANDART_TEXT_WIDTH / WIDTH;
+    scale /= (float) STANDART_TEXT_WIDTH / WIDTH;
+  
     program.StartUseShader();
-    glUniform3f(glGetUniformLocation(
-                program.GetProgram(), "textColor"),
+    glUniform3f(glGetUniformLocation(program.GetProgram(), "textColor"),
                 color.x,
                 color.y,
                 color.z);
@@ -688,7 +630,6 @@ void RenderText(ShaderProgram &program,
     glActiveTexture(GL_TEXTURE0);
     glBindVertexArray(VAO);
 
-    // Iterate through all characters
     std::string::const_iterator c;
     for (c = text.begin(); c != text.end(); c++) 
     {
@@ -699,7 +640,7 @@ void RenderText(ShaderProgram &program,
 
         GLfloat w = ch.Size.x * scale;
         GLfloat h = ch.Size.y * scale;
-        // Update VBO for each character
+        
         GLfloat vertices[6][4] = {
             { xpos,     ypos + h,   0.0, 0.0 },            
             { xpos,     ypos,       0.0, 1.0 },
@@ -709,27 +650,28 @@ void RenderText(ShaderProgram &program,
             { xpos + w, ypos,       1.0, 1.0 },
             { xpos + w, ypos + h,   1.0, 0.0 }           
         };
-        // Render glyph texture over quad
+        
         glBindTexture(GL_TEXTURE_2D, ch.TextureID);
-        // Update content of VBO memory
+        
         glBindBuffer(GL_ARRAY_BUFFER, VBO);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices); // Be sure to use glBufferSubData and not glBufferData
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
 
         glBindBuffer(GL_ARRAY_BUFFER, 0);
-        // Render quad
+        
         glDrawArrays(GL_TRIANGLES, 0, 6);
-        // Now advance cursors for next glyph (note that advance is number of 1/64 pixels)
-        x += (ch.Advance >> 6) * scale; // Bitshift by 6 to get value in pixels (2^6 = 64 (divide amount of 1/64th pixels by 64 to get amount of pixels))
+        
+        x += (ch.Advance >> 6) * scale;
     }
+
     glBindVertexArray(0);
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 void clear_objects()
 {
-    for (auto &it: model_attributes) {
+    for (auto &it: starship_attributes) {
         if (current_frame - it.appearance_timestamp > 10) {
-            model_attributes.erase(model_attributes.begin());
+            starship_attributes.erase(starship_attributes.begin());
         
         } else {
             break;
@@ -796,17 +738,23 @@ void clear_objects()
 int initGL()
 {
 	int res = 0;
-	//грузим функции opengl через glad
-	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
-	{
+	
+	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
 		std::cout << "Failed to initialize OpenGL context" << std::endl;
 		return -1;
 	}
 
-	std::cout << "Vendor: "   << glGetString(GL_VENDOR) << std::endl;
-	std::cout << "Renderer: " << glGetString(GL_RENDERER) << std::endl;
-	std::cout << "Version: "  << glGetString(GL_VERSION) << std::endl;
-	std::cout << "GLSL: "     << glGetString(GL_SHADING_LANGUAGE_VERSION) << std::endl;
+	std::cout << "Vendor: "
+              << glGetString(GL_VENDOR) << std::endl;
+	
+    std::cout << "Renderer: "
+              << glGetString(GL_RENDERER) << std::endl;
+	
+    std::cout << "Version: "
+              << glGetString(GL_VERSION) << std::endl;
+	
+    std::cout << "GLSL: "
+              << glGetString(GL_SHADING_LANGUAGE_VERSION) << std::endl;
 
 	return 0;
 }
@@ -818,7 +766,6 @@ int main(int argc, char** argv)
         return -1;
     }
 
-	//запрашиваем контекст opengl версии 3.3
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3); 
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3); 
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE); 
@@ -826,7 +773,7 @@ int main(int argc, char** argv)
 
     GLFWwindow*  window = glfwCreateWindow(WIDTH,
                                            HEIGHT,
-                                           "SMIERTIELNAJA BITWA",
+                                           game_name.c_str(),
                                            nullptr,
                                            nullptr);
 
@@ -836,19 +783,16 @@ int main(int argc, char** argv)
 		return -1;
 	}
 	
-	glfwMakeContextCurrent(window); 
+	glfwMakeContextCurrent(window);
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
     glfwSetCursorPosCallback(window, mouse_callback);
     glfwSetMouseButtonCallback(window, mouse_button_callback);
-    glfwSetScrollCallback(window, scroll_callback);
-	// glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
 	if (initGL() != 0) {
 	   return -1;
     }
 
-    //Reset any OpenGL errors which could be present for some reason
 	GLenum gl_error = glGetError();
 	while (gl_error != GL_NO_ERROR){
 		gl_error = glGetError();
@@ -860,14 +804,6 @@ int main(int argc, char** argv)
 
     sound_engine = createIrrKlangDevice();
     play_sound("../resources/sounds/background_music.mp3", true);
-
-	/*//создание шейдерной программы из двух файлов с исходниками шейдеров
-	//используется класс-обертка ShaderProgram
-	std::unordered_map<GLenum, std::string> shaders;
-	shaders[GL_VERTEX_SHADER] = "vertex.glsl";
-	shaders[GL_FRAGMENT_SHADER] = "fragment.glsl";
-	program = ShaderProgram(shaders);
-    GL_CHECK_ERRORS;*/
 
     std::unordered_map<GLenum, std::string> skybox_shaders;
     skybox_shaders[GL_VERTEX_SHADER] = "skybox_vertex.glsl";
@@ -903,105 +839,86 @@ int main(int argc, char** argv)
                                       static_cast<GLfloat>(WIDTH),
                                       0.0f,
                                       static_cast<GLfloat>(HEIGHT));
+    
     text_program.StartUseShader();
-    glUniformMatrix4fv(glGetUniformLocation(
-                       text_program.GetProgram(), "projection"),
-                       1,
-                       GL_FALSE,
-                       glm::value_ptr(projection));
+    glUniformMatrix4fv(
+            glGetUniformLocation(text_program.GetProgram(), "projection"),
+            1,
+            GL_FALSE,
+            glm::value_ptr(projection));
 
-    // FreeType
     FT_Library ft;
-    // All functions return a value different than 0 whenever an error occurred
-    if (FT_Init_FreeType(&ft))
-        std::cout << "ERROR::FREETYPE: Could not init FreeType Library" << std::endl;
+    if (FT_Init_FreeType(&ft)) {
+        std::cout << "ERROR::FREETYPE: Could not init FreeType Library"
+                  << std::endl;
+    }
 
-    // Load font as face
     FT_Face face;
-    if (FT_New_Face(ft, "../resources/fonts/arial.ttf", 0, &face))
+    if (FT_New_Face(ft, "../resources/fonts/arial.ttf", 0, &face)) {
         std::cout << "ERROR::FREETYPE: Failed to load font" << std::endl;
+    }
 
-    // Set size to load glyphs as
     FT_Set_Pixel_Sizes(face, 0, 48);
 
-    // Disable byte-alignment restriction
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1); 
 
-    // Load first 128 characters of ASCII set
     for (GLubyte c = 0; c < 128; c++)
     {
-        // Load character glyph 
-        if (FT_Load_Char(face, c, FT_LOAD_RENDER))
-        {
+        if (FT_Load_Char(face, c, FT_LOAD_RENDER)) {
             std::cout << "ERROR::FREETYTPE: Failed to load Glyph" << std::endl;
             continue;
         }
-        // Generate texture
+        
         GLuint texture;
         glGenTextures(1, &texture);
         glBindTexture(GL_TEXTURE_2D, texture);
-        glTexImage2D(
-            GL_TEXTURE_2D,
-            0,
-            GL_RED,
-            face->glyph->bitmap.width,
-            face->glyph->bitmap.rows,
-            0,
-            GL_RED,
-            GL_UNSIGNED_BYTE,
-            face->glyph->bitmap.buffer
+        glTexImage2D(GL_TEXTURE_2D,
+                     0,
+                     GL_RED,
+                     face->glyph->bitmap.width,
+                     face->glyph->bitmap.rows,
+                     0,
+                     GL_RED,
+                     GL_UNSIGNED_BYTE,
+                     face->glyph->bitmap.buffer
         );
-        // Set texture options
+
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        // Now store character for later use
-        Character character = {
+        
+        Character character =
+        {
             texture,
             glm::ivec2(face->glyph->bitmap.width, face->glyph->bitmap.rows),
             glm::ivec2(face->glyph->bitmap_left, face->glyph->bitmap_top),
             (GLuint) face->glyph->advance.x
         };
+        
         Characters.insert(std::pair<GLchar, Character>(c, character));
     }
+    
     glBindTexture(GL_TEXTURE_2D, 0);
-    // Destroy FreeType once we're finished
+    
     FT_Done_Face(face);
     FT_Done_FreeType(ft);
-
     
-    // Configure VAO/VBO for texture quads
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
     glBindVertexArray(VAO);
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * 6 * 4, NULL, GL_DYNAMIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER,
+                 sizeof(GLfloat) * 6 * 4,
+                 NULL,
+                 GL_DYNAMIC_DRAW);
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat), 0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
 
-    // glfwSwapInterval(1); // force 60 frames per second
-
-    /*GLfloat vertices[] =
+    float skybox_vertices[] =
     {
-        // Positions          // Colors           // Texture Coords
-         0.05f,  0.05f, 0.0f,   1.0f, 0.0f, 0.0f,   1.0f, 1.0f, // Top Right
-         0.05f, -0.05f, 0.0f,   0.0f, 1.0f, 0.0f,   1.0f, 0.0f, // Bottom Right
-        -0.05f, -0.05f, 0.0f,   0.0f, 0.0f, 1.0f,   0.0f, 0.0f, // Bottom Left
-        -0.05f,  0.05f, 0.0f,   1.0f, 1.0f, 0.0f,   0.0f, 1.0f  // Top Left 
-    };
-
-    GLuint indices[] =
-    {  // Note that we start from 0!
-        0, 1, 3, // First Triangle
-        1, 2, 3  // Second Triangle
-    };*/
-
-    float skyboxVertices[] =
-    {
-        // positions          
         -1.0f,  1.0f, -1.0f,
         -1.0f, -1.0f, -1.0f,
          1.0f, -1.0f, -1.0f,
@@ -1045,46 +962,24 @@ int main(int argc, char** argv)
          1.0f, -1.0f,  1.0f
     };
 
-    /*GLuint VBO;
-    GLuint EBO;
-    glGenVertexArrays(1, &VAO);
-    glGenBuffers(1, &VBO);
-    glGenBuffers(1, &EBO);
-
-    glBindVertexArray(VAO);
-
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
-
-    // Position attribute
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (GLvoid*)0);
-    glEnableVertexAttribArray(0);
-    // Color attribute
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (GLvoid*) (3 * sizeof(GLfloat)));
-    glEnableVertexAttribArray(1);
-    // TexCoord attribute
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (GLvoid*) (6 * sizeof(GLfloat)));
-    glEnableVertexAttribArray(2);
-
-    glBindVertexArray(0); // Unbind VAO
-
-    scope_texture = loadTexture("../resources/textures/scope.png");*/
-
-    // skybox VAO
+    // Skybox VAO.
     unsigned int skyboxVBO;
     glGenVertexArrays(1, &skyboxVAO);
     glGenBuffers(1, &skyboxVBO);
     glBindVertexArray(skyboxVAO);
     glBindBuffer(GL_ARRAY_BUFFER, skyboxVBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), &skyboxVertices, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER,
+                 sizeof(skybox_vertices),
+                 &skybox_vertices,
+                 GL_STATIC_DRAW);
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glVertexAttribPointer(0,
+                          3,
+                          GL_FLOAT,
+                          GL_FALSE,
+                          3 * sizeof(float),
+                          (void *) 0);
 
-    // load textures
-    // -------------
     std::vector<std::string> faces
     {
         "../resources/textures/skybox/purplenebula_lf.tga",
@@ -1097,42 +992,29 @@ int main(int argc, char** argv)
     
     cubemapTexture = loadCubemap(faces);
 
-    // shader configuration
-    // --------------------
-    /*program.StartUseShader();
-    program.SetUniform("skybox", 0);*/
-
     skybox_program.StartUseShader();
     skybox_program.SetUniform("skybox", 0);
 
-    /*model_program.StartUseShader();*/
-
-    /*Model nanosuit_model(
-            "../resources/objects/nanosuit/nanosuit.obj");*/
-
     Model vulcan_starship_model(
-            "../resources/objects/vulcan_dkyr_class/vulcan_dkyr_class.obj");
+            "../resources/objects/vulcan_starship/vulcan_starship.obj");
 
     Model e45_model(
-            "../resources/objects/E-45-Aircraft/E 45 Aircraft_obj.obj");
+            "../resources/objects/e45_aircraft/e45_aircraft.obj");
 
     Model wraith_model(
-            "../resources/objects/cwwf1303rf28-W/Wraith Raider Starship/Wraith Raider Starship.obj");
+            "../resources/objects/wraith/wraith.obj");
 
     sphere_model = Model(
-            "../resources/objects/Quad_Sphere/3d-model.obj");
+            "../resources/objects/sphere/sphere.obj");
 
     Model dust_model(
             "../resources/objects/cube/cube.obj");
 
-    Model asteroid_model(
-            "../resources/objects/asteroid/A2.obj");
+    Model asteroid_model1(
+            "../resources/objects/asteroid1/asteroid1.obj");
 
     Model asteroid_model2(
-            "../resources/objects/asteroid2/model/rock_by_dommk.obj");
-
-    /*std::vector<void (draw_model)(Model model, float x, float y)>
-            models;*/
+            "../resources/objects/asteroid2/asteroid2.obj");
 
     srand(time(0));
 
@@ -1140,8 +1022,8 @@ int main(int argc, char** argv)
     float prev_dust_timestamp = 0.0f;
     float prev_asteroid_timestamp = 0.0f;
     float game_over_timestamp = 0.0f;
-    int type_of_asteroid = 0;
     int type_of_starship = 0;
+    int type_of_asteroid = 0;
 
     // Render loop.
     while (!glfwWindowShouldClose(window)) {
@@ -1158,9 +1040,10 @@ int main(int argc, char** argv)
             prev_model_timestamp = current_frame - 1.0f;
         }
 
+        // Add new starship.
         if (current_frame - prev_model_timestamp > 2.0f) {
             if (type_of_starship == 0 or type_of_starship == 2) {
-                model_attributes.push_back(StarShipAttributes(
+                starship_attributes.push_back(StarShipAttributes(
                     current_frame,
                     current_frame + 1.0f,
                     glm::vec3(
@@ -1173,7 +1056,7 @@ int main(int argc, char** argv)
                 ));
             
             } else if (type_of_starship == 1 or type_of_starship == 3) {
-                model_attributes.push_back(StarShipAttributes(
+                starship_attributes.push_back(StarShipAttributes(
                     current_frame,
                     current_frame + 1.0f,
                     glm::vec3(
@@ -1186,7 +1069,7 @@ int main(int argc, char** argv)
                 ));
             
             } else {
-                model_attributes.push_back(StarShipAttributes(
+                starship_attributes.push_back(StarShipAttributes(
                     current_frame,
                     current_frame + 1.0f,
                     glm::vec3(
@@ -1203,6 +1086,7 @@ int main(int argc, char** argv)
             prev_model_timestamp = current_frame;
         }
 
+        // Add new asteroid.
         if (current_frame - prev_asteroid_timestamp > 2.0f) {
             if (type_of_asteroid == 0) {
                 asteroid_attributes.push_back(ModelAttributes(
@@ -1212,7 +1096,7 @@ int main(int argc, char** argv)
                         (float) -20 + rand() % 41,
                         0.0f
                     ),
-                    &asteroid_model,
+                    &asteroid_model1,
                     ASTEROID1
                 ));
             
@@ -1234,6 +1118,7 @@ int main(int argc, char** argv)
         
         }
 
+        // Add new dust piece.
         if (current_frame - prev_dust_timestamp > 0.1f) {
             dust_attributes.push_back(ModelAttributes(
                 current_frame,
@@ -1251,50 +1136,36 @@ int main(int argc, char** argv)
 
         clear_objects();
 
-        /*StarShipAttributes it
-        {
-            current_frame,
-            current_frame + 1.0f,
-            glm::vec3(
-                1.0f,
-                1.0f,
-                -15.0f
-            )
-        };
-
-        draw_model(wraith_model, it);*/
-
         std::set<unsigned int> deleted_models_pos;
         std::set<unsigned int> deleted_asteroids_pos;
         std::set<unsigned int> deleted_plasm_balls_pos;
+        std::set<unsigned int> deleted_enemy_plasm_balls_pos;
 
-        for (unsigned int i = 0; i < model_attributes.size(); i++) {
-            draw_model(model_attributes[i]);
-            if (model_attributes[i].real_coords.z < 0.0f and
+        // Process starships.
+        for (unsigned int i = 0; i < starship_attributes.size(); i++) {
+            draw_starship(starship_attributes[i]);
+            if (starship_attributes[i].real_coords.z < 0.0f and
                     current_frame -
-                    model_attributes[i].last_shot_timestamp > 1.5f and
+                    starship_attributes[i].last_shot_timestamp > 1.5f and
                     not game_over) {
                 
                 enemy_plasm_ball_attributes.push_back(ModelAttributes(
                     current_frame,
-                    model_attributes[i].real_coords,
+                    starship_attributes[i].real_coords,
                     &sphere_model,
                     PLASM_BALL
                 ));
 
-                model_attributes[i].last_shot_timestamp = current_frame;
+                starship_attributes[i].last_shot_timestamp = current_frame;
             }
 
-            if (model_attributes[i].real_coords.z > 0.0f
-                    and not model_attributes[i].was_hit
+            if (starship_attributes[i].real_coords.z > 0.0f
                     and not game_over) {
                 
-                model_attributes[i].was_hit = true;
-
                 if ((camera.Position.x >= 0 and
-                        model_attributes[i].real_coords.x >= 0 ) or
+                        starship_attributes[i].real_coords.x >= 0 ) or
                         (camera.Position.x <= 0 and 
-                        model_attributes[i].real_coords.x <= 0 )) {
+                        starship_attributes[i].real_coords.x <= 0 )) {
                     
                     health -= 10;
 
@@ -1302,9 +1173,9 @@ int main(int argc, char** argv)
                     explosion_attributes.push_back(ModelAttributes(
                         current_frame,
                         glm::vec3(
-                            model_attributes[i].real_coords.x,
-                            model_attributes[i].real_coords.y,
-                            model_attributes[i].real_coords.z - 6.0f
+                            starship_attributes[i].real_coords.x,
+                            starship_attributes[i].real_coords.y,
+                            starship_attributes[i].real_coords.z - 6.0f
                         ),
                         &sphere_model,
                         EXPLOSION
@@ -1315,11 +1186,11 @@ int main(int argc, char** argv)
             }
 
             for (unsigned int j = 0; j < plasm_ball_attributes.size(); j++) {
-                if (glm::distance(model_attributes[i].real_coords,
+                if (glm::distance(starship_attributes[i].real_coords,
                                   plasm_ball_attributes[j].real_coords) <=
                         DIST) {
 
-                    if (model_attributes[i].obj_type == VULCAN) {
+                    if (starship_attributes[i].obj_type == VULCAN) {
                         score += 15;
                     
                     } else {
@@ -1331,7 +1202,7 @@ int main(int argc, char** argv)
 
                     explosion_attributes.push_back(ModelAttributes(
                         current_frame,
-                        model_attributes[i].real_coords,
+                        starship_attributes[i].real_coords,
                         &sphere_model,
                         EXPLOSION
                     ));
@@ -1342,15 +1213,13 @@ int main(int argc, char** argv)
             }
         }
 
+        // Process asteroids.
         for (unsigned int i = 0; i < asteroid_attributes.size(); i++) {
             draw_asteroid(asteroid_attributes[i]);
 
             if (asteroid_attributes[i].real_coords.z > 0.0f
-                    and not asteroid_attributes[i].was_hit
                     and not game_over) {
                 
-                asteroid_attributes[i].was_hit = true;
-
                 if ((camera.Position.x >= 0 and
                         asteroid_attributes[i].real_coords.x >= 0 ) or
                         (camera.Position.x <= 0 and
@@ -1477,33 +1346,46 @@ int main(int argc, char** argv)
             draw_plasm_ball(sphere_model, it);
         }
 
-        for (auto &it: enemy_plasm_ball_attributes) {
-            draw_enemy_plasm_ball(sphere_model, it);
+        // Process enemy plasm balls.
+        for (unsigned int i = 0; i < enemy_plasm_ball_attributes.size(); i++) {
+            draw_enemy_plasm_ball(sphere_model,
+                                  enemy_plasm_ball_attributes[i]);
 
-            if (it.real_coords.z > 0.0f
-                    and not it.was_hit
+            if (enemy_plasm_ball_attributes[i].real_coords.z > 0.0f
                     and not game_over) {
                 
                 health -= 5;
-                it.was_hit = true;
-                play_sound("../resources/sounds/shot_sound.mp3",
+                deleted_enemy_plasm_balls_pos.insert(i);
+                play_sound("../resources/sounds/enemy_hit.mp3",
                            false);
             }
-
         }
 
         for (auto &it: dust_attributes) {
             draw_dust(dust_model, it);
         }
 
-        auto model_attributes_begin = model_attributes.begin();
+        for (auto &it: explosion_attributes) {
+            draw_exploison(sphere_model, it);
+        }
+
+        for (auto &it: asteroid_fragment_attributes) {
+            draw_asteroid_fragment(asteroid_model2, it);
+        }
+
+        draw_skybox();
+
+        // Clear destroyed objects.
+        auto model_attributes_begin = starship_attributes.begin();
         auto asteroid_attributes_begin = asteroid_attributes.begin();
         auto plasm_ball_attributes_begin = plasm_ball_attributes.begin();
+        auto enemy_plasm_ball_attributes_begin =
+                enemy_plasm_ball_attributes.begin();
 
         for (auto it = deleted_models_pos.rbegin();
                 it != deleted_models_pos.rend(); ++it) {
 
-            model_attributes.erase(
+            starship_attributes.erase(
                     model_attributes_begin + *it);
         }
 
@@ -1521,22 +1403,20 @@ int main(int argc, char** argv)
                     plasm_ball_attributes_begin + *it);
         }
 
-        for (auto &it: explosion_attributes) {
-            draw_exploison(sphere_model, it);
+        for (auto it = deleted_enemy_plasm_balls_pos.rbegin();
+                it != deleted_enemy_plasm_balls_pos.rend(); ++it) {
+
+            enemy_plasm_ball_attributes.erase(
+                    enemy_plasm_ball_attributes_begin + *it);
         }
 
-        for (auto &it: asteroid_fragment_attributes) {
-            draw_asteroid_fragment(asteroid_model2, it);
-        }
-
-        draw_skybox();
 
         if (health <= 0 and not game_over) {
             health = 0;
             game_over = true;
             game_over_timestamp = current_frame;
 
-            play_sound("../resources/sounds/large_explosion.mp3",
+            play_sound(large_explosion,
                        false);
         }
 
@@ -1556,15 +1436,15 @@ int main(int argc, char** argv)
                        glm::vec3(1.0f, 1.0f, 1.0f));
 
             RenderText(text_program,
-                       "    when I lay My vengeance upon thee",
-                       442.0f,
+                       "    When I lay My vengeance upon thee",
+                       435.0f,
                        392.0f,
                        0.425f,
                        glm::vec3(1.0f, 1.0f, 1.0f));
 
             RenderText(text_program,
-                       "                  OT: Ezekiel, XV, 17",
-                       514.0f,
+                       "                 OT: Ezekiel, XXV, 17",
+                       507.0f,
                        369.0f,
                        0.425f,
                        glm::vec3(1.0f, 1.0f, 1.0f));
@@ -1585,8 +1465,6 @@ int main(int argc, char** argv)
         } else {
             RenderText(text_program,
                        "+",
-                       /*545.0f,
-                       400.0f,*/
                        555.0f,
                        415.0f,
                        0.5f,
@@ -1613,8 +1491,7 @@ int main(int argc, char** argv)
         glfwPollEvents();
     }
 
-    // optional: de-allocate all resources once they've outlived their purpose:
-    // ------------------------------------------------------------------------
+    
     glDeleteVertexArrays(1, &skyboxVAO);
     glDeleteBuffers(1, &skyboxVAO);
 
@@ -1625,9 +1502,6 @@ int main(int argc, char** argv)
         sound_engine->drop();
     }
 
-    std::cout << "iks = " << iks << std::endl;
-    std::cout << "igrec = " << igrec << std::endl;
-    std::cout << "font_size = " << font_size << std::endl;
 
     glfwTerminate();
     return 0;

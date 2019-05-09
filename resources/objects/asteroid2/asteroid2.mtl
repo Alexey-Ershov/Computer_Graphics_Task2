@@ -6,6 +6,6 @@ Kd 1.00000 1.00000 1.00000
 Ka 0.00000 0.00000 0.00000
 Ks 1.00000 1.00000 1.00000
 Ke 0.00000e+0 0.00000e+0 0.00000e+0
-map_Kd ../textures/rock_Base_Color.png
-map_Ks ../textures/rock_Base_Color.png
-map_bump ../textures/rock_Base_Color.png
+map_Kd textures/rock_Base_Color.png
+map_Ks textures/rock_Base_Color.png
+map_bump textures/rock_Base_Color.png
