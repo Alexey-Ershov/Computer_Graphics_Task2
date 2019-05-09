@@ -154,8 +154,29 @@ std::vector<ModelAttributes> asteroid_attributes;
 std::vector<AsteroidFragmentAttributes> asteroid_fragment_attributes;
 
 
-// process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
-// ---------------------------------------------------------------------------------------------------------
+void play_sound(std::string path, bool is_bg)
+{
+    if (not sound_engine) {
+        std::cerr << "irrKlang: Error starting up the sound engine";
+    
+    } else if (is_bg) {
+        sound_engine->play2D(path.c_str(), true);
+    
+    } else {
+        irrklang::ISound *snd = sound_engine->play2D(path.c_str(),
+                                                     false,
+                                                     false,
+                                                     true);
+        
+        if (snd) {
+            snd->setVolume(0.6);
+            snd->setIsPaused(false);
+            snd->drop();
+            snd = NULL;
+        }
+    }
+}
+
 void processInput(GLFWwindow *window)
 {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
@@ -260,8 +281,8 @@ void mouse_button_callback(GLFWwindow* window,
             PLASM_BALL
         ));
 
-        sound_engine->play2D("../resources/sounds/collision.mp3",
-                             false);
+        play_sound("../resources/sounds/collision.mp3",
+                   false);
     
     } else if(button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
         /*model_attributes.push_back(
@@ -838,12 +859,7 @@ int main(int argc, char** argv)
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     sound_engine = createIrrKlangDevice();
-    if (!sound_engine) {
-        std::cerr << "irrKlang: Error starting up the sound engine";
-    
-    } else {
-        sound_engine->play2D("../resources/sounds/background_music.mp3", true);
-    }
+    play_sound("../resources/sounds/background_music.mp3", true);
 
 	/*//создание шейдерной программы из двух файлов с исходниками шейдеров
 	//используется класс-обертка ShaderProgram
@@ -1294,8 +1310,7 @@ int main(int argc, char** argv)
                         EXPLOSION
                     ));
 
-                    sound_engine->play2D("../resources/sounds/explosion.wav",
-                                         false);
+                    play_sound("../resources/sounds/explosion.wav", false);
                 }
             }
 
@@ -1321,8 +1336,8 @@ int main(int argc, char** argv)
                         EXPLOSION
                     ));
 
-                    sound_engine->play2D("../resources/sounds/explosion.wav",
-                                         false);
+                    play_sound("../resources/sounds/explosion.wav",
+                               false);
                 }
             }
         }
@@ -1390,9 +1405,8 @@ int main(int argc, char** argv)
                                 glm::vec3(0.0f, 0.0f, -1.0f)
                             });
 
-                        sound_engine->play2D(
-                                "../resources/sounds/explosion.wav",
-                                false);
+                        play_sound("../resources/sounds/explosion.wav",
+                                   false);
                 }
             }
 
@@ -1453,8 +1467,8 @@ int main(int argc, char** argv)
                             glm::vec3(0.0f, 0.0f, -1.0f)
                         });
 
-                    sound_engine->play2D("../resources/sounds/explosion.wav",
-                                         false);
+                    play_sound("../resources/sounds/explosion.wav",
+                               false);
                 }
             }
         }
@@ -1472,8 +1486,8 @@ int main(int argc, char** argv)
                 
                 health -= 5;
                 it.was_hit = true;
-                sound_engine->play2D("../resources/sounds/shot_sound.mp3",
-                                     false);
+                play_sound("../resources/sounds/shot_sound.mp3",
+                           false);
             }
 
         }
@@ -1522,8 +1536,8 @@ int main(int argc, char** argv)
             game_over = true;
             game_over_timestamp = current_frame;
 
-            sound_engine->play2D("../resources/sounds/large_explosion.mp3",
-                                 false);
+            play_sound("../resources/sounds/large_explosion.mp3",
+                       false);
         }
 
         if (game_over) {
@@ -1606,6 +1620,10 @@ int main(int argc, char** argv)
 
     glDeleteVertexArrays(1, &VAO);
     glDeleteBuffers(1, &VBO);
+
+    if (sound_engine) {
+        sound_engine->drop();
+    }
 
     std::cout << "iks = " << iks << std::endl;
     std::cout << "igrec = " << igrec << std::endl;

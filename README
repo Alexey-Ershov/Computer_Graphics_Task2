@@ -17,7 +17,7 @@ I. Установка сторонних библиотек
            выполнить в терминале команду:
            export LD_LIBRARY_PATH=/usr/local/lib
 
-    3. FREETYE
+    3. FREETYPE
         a. Скачать исходный код по ссылке:
     https://download.savannah.gnu.org/releases/freetype/freetype-2.10.0.tar.bz2
         b. В корневой директории библиотеки выполнить:
